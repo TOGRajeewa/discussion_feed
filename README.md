@@ -68,6 +68,17 @@ DiscussionFeedWebPart (onInit -> configurePnP)
 | `services/MailService.ts` | `sp.utility.sendEmail` → farm SMTP |
 | `services/utils.ts` | DOMPurify sanitize, relative time, initials, local userphoto URL |
 
+## Unit tests
+A standalone Jest harness (separate from the legacy `gulp test` Karma chain) runs on
+modern Node — no farm, no SPFx toolchain needed. SP/native modules are stubbed
+(`test/stubs/`), so tests exercise our own logic: the People Picker double-JSON-parse,
+initials/relative-time helpers, and the local `userphoto.aspx` URL builder.
+
+```powershell
+npm install           # (or just the test devDeps) on any recent Node
+npm run test:unit     # 14 tests across 2 suites
+```
+
 ## Security
 All stored editor HTML is sanitized with **DOMPurify** before
 `dangerouslySetInnerHTML`. People-column writes use the `FieldNameId: { results: [...] }`
