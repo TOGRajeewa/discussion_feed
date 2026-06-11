@@ -1,0 +1,15 @@
+# SPFx / Node
+node_modules/
+lib/
+dist/
+temp/
+*.log
+
+# build output
+solution/
+sharepoint/solution/*.sppkg
+.heft/
+
+# local
+.vscode/settings.json
+release/

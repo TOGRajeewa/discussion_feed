@@ -1,0 +1,18 @@
+{
+  "$schema": "https://dev.office.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "discussion-feed-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/discussionFeed/DiscussionFeedWebPart.js",
+          "manifest": "./src/webparts/discussionFeed/DiscussionFeedWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "DiscussionFeedWebPartStrings": "lib/webparts/discussionFeed/loc/{locale}.js"
+  }
+}

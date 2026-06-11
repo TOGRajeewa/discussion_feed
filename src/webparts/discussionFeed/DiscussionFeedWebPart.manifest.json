@@ -1,0 +1,23 @@
+{
+  "$schema": "https://dev.office.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "a1c2e3f4-5b6d-47a8-9c0e-1f2a3b4c5d6e",
+  "alias": "DiscussionFeedWebPart",
+  "componentType": "WebPart",
+  "version": "*",
+  "manifestVersion": 2,
+  "requiresCustomScript": false,
+  "preconfiguredEntries": [{
+    "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
+    "group": { "default": "Collaboration" },
+    "title": { "default": "Discussion Feed" },
+    "description": { "default": "On-prem Viva-Engage-style discussion feed (SharePoint Subscription Edition)." },
+    "officeFabricIconFontName": "Feedback",
+    "properties": {
+      "postsListTitle": "DiscussionPosts",
+      "commentsListTitle": "DiscussionComments",
+      "assetLibraryServerRelUrl": "",
+      "tinymceSkinUrl": "",
+      "pageSize": 20
+    }
+  }]
+}
