@@ -27,7 +27,7 @@ export class FeedService {
     const page: any = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
       .select(
         'Id', 'Title', 'Body', 'Category', 'Created', 'CommentCount',
-        'Author/Title', 'Author/EMail', 'Author/JobTitle', 'Likes/Id'
+        'Author/Title', 'Author/EMail', 'Likes/Id'
       )
       .expand('Author', 'Likes')
       .orderBy('Created', false)
@@ -54,7 +54,8 @@ export class FeedService {
       bodyHtml: it.Body || '',
       category: (it.Category || 'Discussion'),
       authorTitle: it.Author ? it.Author.Title : 'Unknown',
-      authorDept: (it.Author && it.Author.JobTitle) || '',
+      // JobTitle is not an expandable property of the SP User field on-prem; omit it.
+      authorDept: '',
       authorEmail: it.Author ? it.Author.EMail : '',
       authorPicUrl: it.Author ? localPhotoUrl(this.cfg.webUrl, it.Author.EMail, 'M') : '',
       created: it.Created,

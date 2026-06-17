@@ -41,15 +41,23 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   }
 
   public async componentDidMount(): Promise<void> {
+    // Resolve the current user first and on its own — the composer and likes need it,
+    // and a posts-query failure must not wipe it out.
     try {
-      const [currentUser, page] = await Promise.all([
-        this.svc.getCurrentUser(),
-        this.svc.getPostsFirstPage()
-      ]);
-      this.pager = page;
-      this.setState({ currentUser, posts: page.posts, hasNext: page.hasNext, loading: false });
+      const currentUser = await this.svc.getCurrentUser();
+      this.setState({ currentUser });
     } catch (e) {
-      this.setState({ error: `Failed to load feed: ${e.message || e}`, loading: false });
+      this.setState({ error: `Could not resolve current user: ${e.message || e}`, loading: false });
+      return;
+    }
+
+    try {
+      const page = await this.svc.getPostsFirstPage();
+      this.pager = page;
+      this.setState({ posts: page.posts, hasNext: page.hasNext, loading: false });
+    } catch (e) {
+      // Keep currentUser so the composer still works; just surface the feed error.
+      this.setState({ error: `Failed to load posts: ${e.message || e}`, loading: false });
     }
   }
 
@@ -133,6 +141,19 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   public render(): JSX.Element {
     if (this.state.loading) {
       return <div className={styles.feed}><Spinner size={SpinnerSize.large} label="Loading feed…" /></div>;
+    }
+
+    // If the current user couldn't be resolved (e.g. a load error), show the error
+    // instead of crashing on currentUser.id. The feed needs the user id for likes.
+    if (!this.state.currentUser) {
+      return (
+        <div className={styles.feed}>
+          <h1 className={styles.pageHeading}>Social Feed</h1>
+          <MessageBar messageBarType={MessageBarType.error}>
+            {this.state.error || 'Could not load the feed. Please refresh.'}
+          </MessageBar>
+        </div>
+      );
     }
 
     return (
