@@ -3,6 +3,18 @@ import { IFeedConfig, IPost, IComment, IPostDraft, ICurrentUser, IPagedPosts } f
 import { stripHtml, localPhotoUrl } from './utils';
 import { notifyMentions } from './MailService';
 
+/**
+ * Unwrap an expanded multi-value column. With the odata=verbose header an
+ * expanded collection (e.g. Likes) comes back as { results: [...] }, not a
+ * bare array — so callers must not assume `.map` exists on it directly.
+ */
+function toArray(v: any): any[] {
+  if (!v) { return []; }
+  if (Array.isArray(v)) { return v; }
+  if (v.results && Array.isArray(v.results)) { return v.results; }
+  return [];
+}
+
 export class FeedService {
   constructor(private cfg: IFeedConfig) { }
 
@@ -59,7 +71,7 @@ export class FeedService {
       authorEmail: it.Author ? it.Author.EMail : '',
       authorPicUrl: it.Author ? localPhotoUrl(this.cfg.webUrl, it.Author.EMail, 'M') : '',
       created: it.Created,
-      likeUserIds: (it.Likes || []).map((l: any) => l.Id),
+      likeUserIds: toArray(it.Likes).map((l: any) => l.Id),
       commentCount: it.CommentCount || 0
     };
   }
@@ -94,7 +106,7 @@ export class FeedService {
   public async toggleLike(postId: number, userId: number): Promise<number[]> {
     const item = sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId);
     const cur: any = await item.select('Likes/Id').expand('Likes').get();
-    const ids: number[] = (cur.Likes || []).map((u: any) => u.Id);
+    const ids: number[] = toArray(cur.Likes).map((u: any) => u.Id);
     const next: number[] = ids.indexOf(userId) > -1
       ? ids.filter((i: number) => i !== userId)
       : ids.concat([userId]);
