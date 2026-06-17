@@ -17,6 +17,7 @@ export function EngagementBar(props: IEngagementBarProps): JSX.Element {
     <div className={styles.engagement}>
       <div className={styles.engLeft}>
         <button
+          type="button"
           className={`${styles.engItem} ${props.likedByMe ? styles.engItemActive : ''}`}
           onClick={props.onLike}
           aria-pressed={props.likedByMe}
@@ -25,13 +26,13 @@ export function EngagementBar(props: IEngagementBarProps): JSX.Element {
           <span>{props.likeCount}</span>
         </button>
 
-        <button className={styles.engItem} onClick={props.onToggleComments}>
+        <button type="button" className={styles.engItem} onClick={props.onToggleComments}>
           <Icon iconName="Comment" />
           <span>{props.commentCount}</span>
         </button>
       </div>
 
-      <button className={`${styles.engItem} ${styles.engShare}`} onClick={props.onShare}>
+      <button type="button" className={`${styles.engItem} ${styles.engShare}`} onClick={props.onShare}>
         <Icon iconName="Share" />
         <span>Share</span>
       </button>
