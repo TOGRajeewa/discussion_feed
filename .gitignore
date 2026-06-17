@@ -11,8 +11,9 @@ temp/
 # build output
 solution/
 sharepoint/solution/
-dist-standalone/
 *.sppkg
+# NOTE: dist-standalone/ is intentionally committed on this branch so the
+# prebuilt classic bundle can be downloaded/uploaded without a local build.
 .heft/
 bundle.log
 package.log
