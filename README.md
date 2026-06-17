@@ -68,35 +68,9 @@ DiscussionFeedWebPart (onInit -> configurePnP)
 | `services/MailService.ts` | `sp.utility.sendEmail` → farm SMTP |
 | `services/utils.ts` | DOMPurify sanitize, relative time, initials, local userphoto URL |
 
-## Classic pages — standalone bundle (no app infrastructure)
-For classic on-prem sites where the SharePoint Add-in (app) infrastructure is **off**
-(no app DNS domain / App Management service), use the standalone bundle instead of the
-`.sppkg`. It renders the *same* React feed via a Script Editor Web Part, bootstrapping
-PnPjs from the classic page context — no app model, no per-site install.
-
-```powershell
-nvm use 8.17.0
-npm install
-npm run build:standalone        # -> dist-standalone/ (bundle + Fabric fonts + TinyMCE skin)
-
-# upload everything to SiteAssets (preserves folder structure)
-Connect-PnPOnline -Url "https://intranet/sites/CBSL" -CurrentCredentials
-.\provisioning\Upload-Standalone.ps1 -SiteUrl "https://intranet/sites/CBSL"
-```
-
-Then edit a classic page → add a **Script Editor Web Part** → paste
-[provisioning/classic-script-editor-snippet.html](provisioning/classic-script-editor-snippet.html)
-(adjust the `<script src>` site path) → Save.
-
-What gets hosted in `SiteAssets/`:
-| Path | Purpose |
-|---|---|
-| `discussion-feed.bundle.js` | the whole app (React + Fluent + TinyMCE + PnPjs), one file |
-| `fabric-icons/*.woff` | Fluent icon fonts served **locally** (never the cloud CDN) |
-| `tinymce/skins/lightgray/**` | editor skin |
-
-Requires **Custom Script enabled** on the site collection. No property pane — configure
-via the snippet's `render({...})` options.
+> **Classic-page variant:** a standalone (no-app) bundle for classic pages lives on the
+> **`Dev-standalone`** branch (Script Editor Web Part + SiteAssets hosting). This branch
+> is the SPFx app-model version.
 
 ## Unit tests
 A standalone Jest harness (separate from the legacy `gulp test` Karma chain) runs on
