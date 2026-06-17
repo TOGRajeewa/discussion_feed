@@ -12,7 +12,7 @@ export interface ICommentThreadProps {
   onAdd: (html: string) => void;
 }
 
-interface ICommentThreadState { draft: string; }
+export interface ICommentThreadState { draft: string; }
 
 export class CommentThread extends React.Component<ICommentThreadProps, ICommentThreadState> {
   constructor(props: ICommentThreadProps) {
@@ -47,12 +47,13 @@ export class CommentThread extends React.Component<ICommentThreadProps, IComment
 
         <div className={styles.commentItem}>
           <div style={{ flex: 1, display: 'flex', gap: 8 }}>
-            <TextField
-              placeholder="Write a comment…"
-              value={this.state.draft}
-              onChanged={(v: string) => this.setState({ draft: v })}
-              styles={{ root: { flex: 1 } }}
-            />
+            <div style={{ flex: 1 }}>
+              <TextField
+                placeholder="Write a comment…"
+                value={this.state.draft}
+                onChanged={(v: string) => this.setState({ draft: v })}
+              />
+            </div>
             <PrimaryButton text="Send" onClick={this.submit} disabled={!this.state.draft.trim()} />
           </div>
         </div>

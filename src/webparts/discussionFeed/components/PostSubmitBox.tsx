@@ -16,7 +16,7 @@ export interface IPostSubmitBoxProps {
   onSubmit: (draft: IPostDraft) => Promise<void>;
 }
 
-interface IPostSubmitBoxState {
+export interface IPostSubmitBoxState {
   expanded: boolean;
   html: string;
   category: PostCategory;
@@ -84,12 +84,13 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
           <div className={styles.submitToolbar}>
             <div className={styles.submitTools}>
               <Icon iconName="Attach" title="Insert image" />
-              <Dropdown
-                options={CATEGORY_OPTIONS}
-                selectedKey={this.state.category}
-                onChanged={(o: IDropdownOption) => this.setState({ category: o.key as PostCategory })}
-                styles={{ root: { minWidth: 140 } }}
-              />
+              <div style={{ minWidth: 140 }}>
+                <Dropdown
+                  options={CATEGORY_OPTIONS}
+                  selectedKey={this.state.category}
+                  onChanged={(o: IDropdownOption) => this.setState({ category: o.key as PostCategory })}
+                />
+              </div>
             </div>
             <PrimaryButton
               className={styles.postButton}

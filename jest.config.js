@@ -1,9 +1,10 @@
 // Standalone unit-test harness. Intentionally separate from `gulp test` (the SPFx
 // 1.4.1 Karma chain) so it runs on a modern Node without the legacy toolchain.
-// Heavy SPFx/native modules are stubbed via moduleNameMapper — we test our own logic.
+// Tests live OUTSIDE src/ so the SPFx TypeScript task never compiles them
+// (1.4.1 ignores tsconfig "exclude"). Heavy SPFx/native modules are stubbed.
 module.exports = {
-  rootDir: 'src',
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  rootDir: '.',
+  testMatch: ['<rootDir>/test/unit/**/*.test.ts'],
   testEnvironment: 'node',
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
@@ -12,8 +13,8 @@ module.exports = {
     }]
   },
   moduleNameMapper: {
-    '^@microsoft/sp-http$': '<rootDir>/../test/stubs/sp-http.ts',
-    '^dompurify$': '<rootDir>/../test/stubs/dompurify.ts',
-    '^tinymce/.*$': '<rootDir>/../test/stubs/empty.ts'
+    '^@microsoft/sp-http$': '<rootDir>/test/stubs/sp-http.ts',
+    '^dompurify$': '<rootDir>/test/stubs/dompurify.ts',
+    '^tinymce/.*$': '<rootDir>/test/stubs/empty.ts'
   }
 };

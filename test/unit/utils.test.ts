@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { stripHtml, initials, timeAgo, localPhotoUrl } from '../utils';
+import { stripHtml, initials, timeAgo, localPhotoUrl } from '../../src/webparts/discussionFeed/services/utils';
 
 describe('stripHtml', () => {
   it('removes tags and collapses whitespace', () => {

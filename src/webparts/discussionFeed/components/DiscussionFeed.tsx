@@ -8,7 +8,7 @@ import { FeedList } from './FeedList';
 import { FeedService } from '../services/FeedService';
 import { IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts } from '../models';
 
-interface IDiscussionFeedState {
+export interface IDiscussionFeedState {
   loading: boolean;
   posts: IPost[];
   currentUser: ICurrentUser;

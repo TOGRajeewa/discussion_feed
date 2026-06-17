@@ -5,10 +5,18 @@ dist/
 temp/
 *.log
 
+# SPFx-generated SCSS module typings (build artifact)
+*.module.scss.ts
+
 # build output
 solution/
-sharepoint/solution/*.sppkg
+sharepoint/solution/
+dist-standalone/
+*.sppkg
 .heft/
+bundle.log
+package.log
+install-node8.log
 
 # local
 .vscode/settings.json

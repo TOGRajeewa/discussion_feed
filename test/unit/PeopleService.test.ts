@@ -1,4 +1,4 @@
-import { searchPeople } from '../PeopleService';
+import { searchPeople } from '../../src/webparts/discussionFeed/services/PeopleService';
 
 /** Fake SPHttpClient capturing the request and returning a canned picker payload. */
 function fakeClient(pickerJsonString: string): any {

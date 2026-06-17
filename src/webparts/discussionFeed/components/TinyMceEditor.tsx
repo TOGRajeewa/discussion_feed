@@ -33,7 +33,7 @@ export interface ITinyMceEditorProps {
   onMentionsChange: (mentions: IMentionUser[]) => void;
 }
 
-interface ITinyMceEditorState {
+export interface ITinyMceEditorState {
   mentionOpen: boolean;
   mentionQuery: string;
   mentionResults: IMentionUser[];
@@ -201,7 +201,7 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, ITinyMce
                   style={{ padding: '6px 8px', cursor: 'pointer' }}
                   onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => { e.preventDefault(); this.pickMention(u); }}
                 >
-                  <Persona text={u.title} secondaryText={u.email} size={PersonaSize.size28} />
+                  <Persona primaryText={u.title} secondaryText={u.email} size={PersonaSize.size28} />
                 </div>
               ))}
             </div>
