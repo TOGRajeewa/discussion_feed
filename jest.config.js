@@ -5,7 +5,7 @@
 module.exports = {
   rootDir: '.',
   testMatch: ['<rootDir>/test/unit/**/*.test.ts'],
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',   // jsdom works for both suites (utils needs DOM); avoids env drift
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       isolatedModules: true,                 // transpile-only: don't typecheck SPFx imports
