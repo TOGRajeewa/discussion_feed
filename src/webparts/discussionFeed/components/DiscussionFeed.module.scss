@@ -240,13 +240,24 @@ $pageBg: #ffffff;
 :global(.mce-tinymce iframe) { background: #fff !important; }
 
 /* emoji picker */
-.emojiGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 8px; max-width: 340px; }
+.emojiPanel { width: 340px; padding: 8px; }
+.emojiSearch {
+  width: 100%; box-sizing: border-box; border: 1px solid $cardBorder; border-radius: 6px;
+  padding: 7px 10px; font-size: 13px; margin-bottom: 8px; outline: none;
+}
+.emojiSearch:focus { border-color: $burgundy; }
+.emojiGrid {
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+  max-height: 260px; overflow-y: auto;
+}
 .emojiBtn {
-  background: none; border: none; cursor: pointer; font-size: 22px; line-height: 1; padding: 4px; border-radius: 4px;
+  background: none; border: none; cursor: pointer; font-size: 20px; line-height: 1;
+  padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
   font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
 }
 .emojiBtn:hover { background: #f3f2f1; }
-.emojiImg { width: 24px; height: 24px; display: block; }
+.emojiImg { width: 26px; height: 26px; display: block; }
+.emojiEmpty { grid-column: 1 / -1; text-align: center; color: $metaGray; padding: 16px; font-size: 13px; }
 
 /* inline image emoji inside posts/composer */
 :global(img.df-emoji) { width: 1.3em; height: 1.3em; vertical-align: -0.25em; }
