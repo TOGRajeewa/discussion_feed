@@ -217,6 +217,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
             onImage={this.onImage}
             onAttach={this.onAttach}
             activeFormats={this.state.activeFormats}
+            emojiBaseUrl={cfg.emojiBaseUrl}
           />
           <PrimaryButton
             className={styles.postButton}

@@ -246,3 +246,7 @@ $pageBg: #ffffff;
   font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
 }
 .emojiBtn:hover { background: #f3f2f1; }
+.emojiImg { width: 24px; height: 24px; display: block; }
+
+/* inline image emoji inside posts/composer */
+:global(img.df-emoji) { width: 1.3em; height: 1.3em; vertical-align: -0.25em; }

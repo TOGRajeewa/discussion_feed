@@ -19,6 +19,7 @@ export interface IDiscussionFeedWebPartProps {
   commentsListTitle: string;
   assetLibraryServerRelUrl: string;
   tinymceSkinUrl: string;
+  emojiBaseUrl: string;
   pageSize: number;
 }
 
@@ -40,6 +41,9 @@ export default class DiscussionFeedWebPart extends BaseClientSideWebPart<IDiscus
       tinymceSkinUrl:
         this.properties.tinymceSkinUrl ||
         `${this.context.pageContext.web.serverRelativeUrl}/SiteAssets/tinymce/skins/lightgray`.replace('//', '/'),
+      emojiBaseUrl:
+        this.properties.emojiBaseUrl ||
+        `${this.context.pageContext.web.serverRelativeUrl}/SiteAssets/emoji/`.replace('//', '/'),
       pageSize: this.properties.pageSize || 20
     };
 
@@ -74,6 +78,7 @@ export default class DiscussionFeedWebPart extends BaseClientSideWebPart<IDiscus
             PropertyPaneTextField('commentsListTitle', { label: strings.CommentsListLabel }),
             PropertyPaneTextField('assetLibraryServerRelUrl', { label: strings.AssetLibLabel }),
             PropertyPaneTextField('tinymceSkinUrl', { label: strings.SkinUrlLabel }),
+            PropertyPaneTextField('emojiBaseUrl', { label: strings.EmojiUrlLabel }),
             PropertyPaneSlider('pageSize', { label: strings.PageSizeLabel, min: 5, max: 50, step: 5 })
           ]
         }]

@@ -51,6 +51,7 @@ export interface IFeedConfig {
   commentsListTitle: string;  // e.g. "DiscussionComments"
   assetLibraryServerRelUrl: string; // e.g. "/sites/Intranet/FeedImages"
   tinymceSkinUrl: string;           // e.g. "/sites/Intranet/SiteAssets/tinymce/skins/lightgray"
+  emojiBaseUrl: string;             // e.g. "/sites/Intranet/SiteAssets/emoji/" (trailing slash)
   pageSize: number;
 }
 

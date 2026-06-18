@@ -15,6 +15,7 @@ export interface IComposerToolbarProps {
   onImage: () => void;                               // upload + insert image
   onAttach: () => void;                              // upload + insert file link
   activeFormats: { [cmd: string]: boolean };         // highlight active Bold/Italic/lists
+  emojiBaseUrl: string;                              // SiteAssets/emoji/ for image emojis
 }
 
 export interface IComposerToolbarState { emojiOpen: boolean; }
@@ -111,7 +112,8 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
         {this.state.emojiOpen &&
           <EmojiPicker
             targetId={this.emojiId}
-            onSelect={(e: string) => { this.props.insert(e); this.setState({ emojiOpen: false }); }}
+            baseUrl={this.props.emojiBaseUrl}
+            onSelect={(html: string) => { this.props.insert(html); this.setState({ emojiOpen: false }); }}
             onDismiss={() => this.setState({ emojiOpen: false })}
           />}
       </div>

@@ -6,6 +6,7 @@ define([], function() {
     "CommentsListLabel": "Comments list title",
     "AssetLibLabel": "Asset library server-relative URL",
     "SkinUrlLabel": "TinyMCE skin URL (server-relative)",
+    "EmojiUrlLabel": "Emoji image base URL (server-relative)",
     "PageSizeLabel": "Posts per page"
   }
 });
