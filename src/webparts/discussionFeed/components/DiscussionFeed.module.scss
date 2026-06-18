@@ -139,6 +139,84 @@ $pageBg: #ffffff;
 .commentAuthor { font-weight: 600; font-size: 13px; color: $nameBlack; }
 .commentMeta { color: $metaGray; font-size: 11.5px; }
 
-/* ---- editor ---- */
-.editorWrap :global(.ql-container) { border-radius: 0 0 8px 8px; min-height: 90px; font-size: 14px; }
-.editorWrap :global(.ql-toolbar) { border-radius: 8px 8px 0 0; }
+/* ===== Composer (Viva-Engage style) ===== */
+
+/* collapsed */
+.collapsedRow { display: flex; align-items: center; gap: 12px; }
+.collapsedPlaceholder {
+  flex: 1; border: 1px solid $cardBorder; border-radius: 22px;
+  padding: 11px 16px; color: $metaGray; background: #faf9f8; cursor: text; font-size: 14px;
+}
+.typeTabs { display: flex; gap: 6px; margin-top: 12px; border-top: 1px solid $cardBorder; padding-top: 10px; }
+.typeTab {
+  display: flex; align-items: center; gap: 8px; background: none; border: none;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; color: $nameBlack;
+  i { font-size: 16px; }
+}
+.typeTab:hover { background: #f3f2f1; }
+
+/* expanded */
+.composerTop { display: flex; justify-content: flex-end; }
+.collapseLink { color: $burgundy; font-size: 13px; cursor: pointer; }
+.collapseLink:hover { text-decoration: underline; }
+.composerArea {
+  position: relative; border: 1px solid $cardBorder; border-radius: 10px;
+  padding: 14px; margin: 6px 0 10px;
+}
+.typePill {
+  display: inline-block; color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 12px; border-radius: 10px; margin-bottom: 10px; letter-spacing: .3px;
+}
+
+/* question title */
+.qTitleWrap { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.qTitle {
+  flex: 1; border: none; outline: none; font-size: 18px; font-weight: 600; color: $nameBlack;
+  &::placeholder { color: #8a8886; font-weight: 600; }
+}
+.qCount { color: $metaGray; font-size: 12px; }
+
+/* editor host + placeholder overlay */
+.editorHost { position: relative; }
+.editorPlaceholder {
+  position: absolute; top: 8px; left: 2px; color: #8a8886; font-size: 14.5px;
+  pointer-events: none; z-index: 1;
+}
+
+/* people picker field */
+.ppf { font-size: 14px; }
+.ppfInline { border-top: 1px solid $cardBorder; padding-top: 10px; margin-bottom: 8px; }
+.ppfBox { margin-bottom: 10px; }
+.ppfRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ppfLeadIcon { color: $metaGray; font-size: 16px; margin-right: 2px; }
+.ppfChip {
+  display: inline-flex; align-items: center; gap: 6px; background: #f3f2f1;
+  border-radius: 14px; padding: 3px 8px 3px 3px; font-size: 13px;
+}
+.ppfChipDot {
+  width: 20px; height: 20px; border-radius: 50%; background: $burgundy; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.ppfChipX { cursor: pointer; font-size: 11px; color: $metaGray; }
+.ppfChipX:hover { color: $burgundy; }
+.ppfInput { flex: 1; min-width: 140px; border: none; outline: none; font-size: 14px; padding: 4px; }
+.ppfList { min-width: 260px; padding: 4px; }
+.ppfOption { padding: 6px 8px; cursor: pointer; }
+.ppfOption:hover { background: #f3f2f1; }
+
+/* bottom toolbar */
+.composerBottom { display: flex; align-items: center; gap: 8px; }
+.composerToolbar { display: flex; align-items: center; gap: 2px; flex: 1; flex-wrap: wrap; }
+.catBtn { color: inherit; }
+.tbDivider { width: 1px; height: 22px; background: $cardBorder; margin: 0 6px; }
+.tbBtn {
+  background: none; border: none; cursor: pointer; padding: 6px; border-radius: 4px;
+  color: #444; font-size: 16px; line-height: 1;
+  i { font-size: 16px; }
+}
+.tbBtn:hover { background: #f3f2f1; color: $burgundy; }
+
+/* emoji picker */
+.emojiGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 8px; max-width: 320px; }
+.emojiBtn { background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; }
+.emojiBtn:hover { background: #f3f2f1; }
