@@ -16,15 +16,33 @@ param(
 
 if (-not (Test-Path $Source)) { throw "Not found: $Source" }
 
+# Upload only the emojis referenced in emojiSet.ts (the curated set), not the whole folder.
+$tsPath = "$(Split-Path $PSScriptRoot -Parent)\src\webparts\discussionFeed\components\emojiSet.ts"
+$names = @()
+if (Test-Path $tsPath) {
+  $names = Select-String -Path $tsPath -Pattern "file: '([^']+\.png)'" -AllMatches |
+    ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
+}
+if (-not $names -or $names.Count -eq 0) {
+  Write-Host "emojiSet.ts not found/empty; uploading all PNGs in $Source." -ForegroundColor Yellow
+  $names = (Get-ChildItem -Path $Source -File -Filter *.png).Name
+}
+
 Connect-PnPOnline -Url $SiteUrl -CurrentCredentials
 
 $target = "SiteAssets/emoji"
 if ($Subfolder) { $target = "SiteAssets/$($Subfolder.Trim('/'))/emoji" }
 Resolve-PnPFolder -SiteRelativePath $target | Out-Null
 
-Get-ChildItem -Path $Source -File -Filter *.png | ForEach-Object {
-  Add-PnPFile -Path $_.FullName -Folder $target | Out-Null
-  Write-Host "Uploaded $target/$($_.Name)" -ForegroundColor DarkGray
+$n = 0
+foreach ($name in $names) {
+  $file = Join-Path $Source $name
+  if (Test-Path $file) {
+    Add-PnPFile -Path $file -Folder $target | Out-Null
+    $n++
+  } else {
+    Write-Host "  (skip, not found locally: $name)" -ForegroundColor DarkYellow
+  }
 }
 
-Write-Host "Done. Set emojiBaseUrl to /$target/ (with a trailing slash)." -ForegroundColor Green
+Write-Host "Uploaded $n emoji(s) to $target. Set emojiBaseUrl to /$target/ (trailing slash)." -ForegroundColor Green

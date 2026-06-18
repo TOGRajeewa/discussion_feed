@@ -20,3 +20,6 @@ install-node8.log
 # local
 .vscode/settings.json
 release/
+
+# emoji image assets (large; sourced separately, listed in emojiSet.ts)
+assets/emoji/*.png
