@@ -185,12 +185,15 @@ $pageBg: #ffffff;
   position: relative; width: 120px; height: 120px; border-radius: 8px; overflow: hidden;
   img { width: 100%; height: 100%; object-fit: cover; display: block; }
 }
+/* !important guards against SharePoint classic global <button> width/min-width/padding */
 .composerImageX {
-  position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: none;
-  border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer;
+  position: absolute; top: 4px; right: 4px;
+  width: 22px !important; height: 22px !important; min-width: 22px !important; padding: 0 !important;
+  margin: 0 !important; border: none !important;
+  border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; cursor: pointer;
   font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
 }
-.composerImageX:hover { background: rgba(0,0,0,0.8); }
+.composerImageX:hover { background: rgba(0,0,0,0.85); }
 
 /* image gallery inside a published post */
 :global(.df-images) {
