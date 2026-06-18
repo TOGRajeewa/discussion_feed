@@ -26,6 +26,7 @@ export interface IPostSubmitBoxState {
   questionTitle: string;
   addedPeople: IMentionUser[];
   praisePeople: IMentionUser[];
+  activeFormats: { [cmd: string]: boolean };
   submitting: boolean;
 }
 
@@ -40,7 +41,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   private empty(category: PostCategory): IPostSubmitBoxState {
     return {
       expanded: false, category, html: '', questionTitle: '',
-      addedPeople: [], praisePeople: [], submitting: false
+      addedPeople: [], praisePeople: [], activeFormats: {}, submitting: false
     };
   }
 
@@ -192,6 +193,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
             placeholder={def.bodyPlaceholder}
             onChange={(html: string) => this.setState({ html })}
             onReady={this.onReady}
+            onFormatState={(s: { [cmd: string]: boolean }) => this.setState({ activeFormats: s })}
           />
         </div>
 
@@ -214,6 +216,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
             insert={this.insert}
             onImage={this.onImage}
             onAttach={this.onAttach}
+            activeFormats={this.state.activeFormats}
           />
           <PrimaryButton
             className={styles.postButton}

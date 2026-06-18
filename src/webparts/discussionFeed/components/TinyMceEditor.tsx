@@ -21,7 +21,11 @@ export interface ITinyMceEditorProps {
   onChange: (html: string) => void;
   /** Hands the live TinyMCE instance to the parent so the custom toolbar can drive it. */
   onReady: (editor: any) => void;
+  /** Reports active format state (Bold/Italic/lists) so the toolbar can highlight. */
+  onFormatState?: (state: { [cmd: string]: boolean }) => void;
 }
+
+const TRACKED_COMMANDS: string[] = ['Bold', 'Italic', 'InsertUnorderedList', 'InsertOrderedList'];
 
 let edSeq: number = 0;
 
@@ -45,6 +49,7 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
       height: 150,
       plugins: 'table lists link image paste autolink',
       table_default_attributes: { border: '1' },
+      table_toolbar: '',          // disable the floating table context toolbar (it overlapped)
       paste_data_images: false,
       images_upload_handler: this.onImageUpload,   // paste/drag uploads
       content_style:
@@ -58,6 +63,12 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
         });
         ed.on('keyup change input SetContent', () => {
           this.props.onChange(ed.getContent());
+        });
+        ed.on('NodeChange keyup', () => {
+          if (!this.props.onFormatState) { return; }
+          const state: { [cmd: string]: boolean } = {};
+          TRACKED_COMMANDS.forEach((c: string) => { state[c] = ed.queryCommandState(c); });
+          this.props.onFormatState(state);
         });
       }
     });

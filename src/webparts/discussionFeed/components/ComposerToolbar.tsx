@@ -14,6 +14,7 @@ export interface IComposerToolbarProps {
   insert: (html: string) => void;                    // insert HTML/emoji
   onImage: () => void;                               // upload + insert image
   onAttach: () => void;                              // upload + insert file link
+  activeFormats: { [cmd: string]: boolean };         // highlight active Bold/Italic/lists
 }
 
 export interface IComposerToolbarState { emojiOpen: boolean; }
@@ -70,18 +71,21 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
         />
         <span className={styles.tbDivider} />
 
-        {fmt.map((b, i) => (
-          <button
-            type="button"
-            key={i}
-            className={styles.tbBtn}
-            title={b.title}
-            onMouseDown={this.noFocusLoss}
-            onClick={() => (b.action ? b.action() : this.props.exec(b.cmd))}
-          >
-            <Icon iconName={b.icon} />
-          </button>
-        ))}
+        {fmt.map((b, i) => {
+          const active: boolean = !!b.cmd && this.props.activeFormats[b.cmd];
+          return (
+            <button
+              type="button"
+              key={i}
+              className={`${styles.tbBtn} ${active ? styles.tbBtnActive : ''}`}
+              title={b.title}
+              onMouseDown={this.noFocusLoss}
+              onClick={() => (b.action ? b.action() : this.props.exec(b.cmd))}
+            >
+              <Icon iconName={b.icon} />
+            </button>
+          );
+        })}
 
         <span className={styles.tbDivider} />
 
