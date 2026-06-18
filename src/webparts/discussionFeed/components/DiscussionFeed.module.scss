@@ -207,15 +207,19 @@ $pageBg: #ffffff;
 /* bottom toolbar — single compact row, hardened against SharePoint global button CSS */
 .composerBottom { display: flex; align-items: center; gap: 8px; }
 .composerToolbar {
-  display: flex; align-items: center; gap: 3px; flex: 1 1 auto; flex-wrap: nowrap;
+  display: flex; align-items: center; justify-content: flex-start; flex: 1 1 auto; flex-wrap: nowrap;
 }
 .catBtn {
-  width: 40px !important; height: 32px !important; margin: 0 !important; padding: 0 !important;
+  width: 40px !important; height: 32px !important; min-width: 40px !important;
+  margin: 0 1px !important; padding: 0 !important;
 }
 .tbDivider { flex: 0 0 auto; width: 1px; height: 22px; background: $cardBorder; margin: 0 5px; }
+/* !important guards against SharePoint classic master-page <button> styles that
+   otherwise inflate width/min-width and spread the toolbar across the row */
 .tbBtn {
-  flex: 0 0 auto;
-  width: 30px; height: 30px; margin: 0; padding: 0;
+  flex: 0 0 auto !important;
+  width: 32px !important; height: 32px !important; min-width: 32px !important; max-width: 32px !important;
+  margin: 0 1px !important; padding: 0 !important;
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: none; cursor: pointer; border-radius: 4px; color: #444;
   i { font-size: 16px; line-height: 1; }
@@ -223,7 +227,22 @@ $pageBg: #ffffff;
 .tbBtn:hover { background: #f3f2f1; color: $burgundy; }
 .tbBtnActive { background: #edebe9; color: $burgundy; }
 
+/* strip TinyMCE skin borders/shadows so only our colored composerArea frame shows */
+:global(.mce-tinymce),
+:global(.mce-container),
+:global(.mce-panel),
+:global(.mce-edit-area),
+:global(.mce-stack-layout-item) {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+:global(.mce-tinymce iframe) { background: #fff !important; }
+
 /* emoji picker */
-.emojiGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 8px; max-width: 320px; }
-.emojiBtn { background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; }
+.emojiGrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 8px; max-width: 340px; }
+.emojiBtn {
+  background: none; border: none; cursor: pointer; font-size: 22px; line-height: 1; padding: 4px; border-radius: 4px;
+  font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+}
 .emojiBtn:hover { background: #f3f2f1; }
