@@ -176,12 +176,30 @@ $pageBg: #ffffff;
 }
 .qCount { color: $metaGray; font-size: 12px; }
 
-/* editor host + placeholder overlay */
+/* editor host (placeholder now lives inside the editor via :before) */
 .editorHost { position: relative; }
-.editorPlaceholder {
-  position: absolute; top: 8px; left: 2px; color: #8a8886; font-size: 14.5px;
-  pointer-events: none; z-index: 1;
+
+/* composer image attachments (thumbnails with remove) */
+.composerImages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.composerImageThumb {
+  position: relative; width: 120px; height: 120px; border-radius: 8px; overflow: hidden;
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
 }
+.composerImageX {
+  position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: none;
+  border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer;
+  font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.composerImageX:hover { background: rgba(0,0,0,0.8); }
+
+/* image gallery inside a published post */
+:global(.df-images) {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-top: 10px; border-radius: 8px; overflow: hidden;
+}
+:global(.df-images img) { width: 100%; height: 240px; object-fit: cover; display: block; }
+:global(.df-images[data-count="1"]) { grid-template-columns: 1fr; }
+:global(.df-images[data-count="1"] img) { height: auto; max-height: 460px; object-fit: contain; background: #f3f2f1; }
+:global(.df-images[data-count="3"] img:first-child) { grid-column: 1 / -1; }
 
 /* people picker field */
 .ppf { font-size: 14px; }

@@ -11,7 +11,6 @@ import 'tinymce/plugins/autolink';
 
 import styles from './DiscussionFeed.module.scss';
 import { uploadFeedImage } from '../services/UploadService';
-import { stripHtml } from '../services/utils';
 
 export interface ITinyMceEditorProps {
   value: string;
@@ -31,8 +30,8 @@ let edSeq: number = 0;
 
 /**
  * TinyMCE with its built-in toolbar hidden — formatting is driven by our own
- * React ComposerToolbar via the exposed editor instance. Keeps tables, lists,
- * links, and image upload to the local asset library.
+ * React ComposerToolbar via the exposed editor instance. The placeholder lives
+ * INSIDE the editor (CSS :before) so the caret and placeholder text align.
  */
 export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
   private editorId: string = `dfeed-tinymce-${edSeq++}`;
@@ -43,39 +42,55 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
       selector: `#${this.editorId}`,
       skin_url: this.props.skinUrl,
       menubar: false,
-      toolbar: false,            // our custom toolbar drives formatting
+      toolbar: false,
       statusbar: false,
       branding: false,
       height: 150,
       plugins: 'table lists link image paste autolink',
       table_default_attributes: { border: '1' },
-      table_toolbar: '',          // disable the floating table context toolbar (it overlapped)
+      table_toolbar: '',
       paste_data_images: false,
-      images_upload_handler: this.onImageUpload,   // paste/drag uploads
+      images_upload_handler: this.onImageUpload,
       content_style:
-        'body{font-family:Segoe UI,Arial,sans-serif;font-size:14.5px;color:#242424;line-height:1.5;} ' +
-        'table{border-collapse:collapse;} td,th{border:1px solid #e1e1e1;padding:6px 8px;} img{max-width:100%;}',
+        'body{font-family:Segoe UI,Arial,sans-serif;font-size:14.5px;color:#242424;line-height:1.5;margin:0;padding:10px 12px;position:relative;} ' +
+        'table{border-collapse:collapse;} td,th{border:1px solid #e1e1e1;padding:6px 8px;} img{max-width:100%;} ' +
+        '.df-empty:before{content:attr(data-mce-placeholder);color:#8a8886;position:absolute;top:10px;left:12px;pointer-events:none;}',
       setup: (ed: any) => {
         this.editor = ed;
         ed.on('init', () => {
           ed.setContent(this.props.value || '');
+          ed.getBody().setAttribute('data-mce-placeholder', this.props.placeholder || '');
+          this.togglePlaceholder(ed);
           this.props.onReady(ed);
         });
-        ed.on('keyup change input SetContent', () => {
+        ed.on('keyup change input SetContent NodeChange focus blur', () => {
           this.props.onChange(ed.getContent());
-        });
-        ed.on('NodeChange keyup', () => {
-          if (!this.props.onFormatState) { return; }
-          const state: { [cmd: string]: boolean } = {};
-          TRACKED_COMMANDS.forEach((c: string) => { state[c] = ed.queryCommandState(c); });
-          this.props.onFormatState(state);
+          this.togglePlaceholder(ed);
+          if (this.props.onFormatState) {
+            const state: { [cmd: string]: boolean } = {};
+            TRACKED_COMMANDS.forEach((c: string) => { state[c] = ed.queryCommandState(c); });
+            this.props.onFormatState(state);
+          }
         });
       }
     });
   }
 
+  public componentDidUpdate(prev: ITinyMceEditorProps): void {
+    if (this.editor && prev.placeholder !== this.props.placeholder) {
+      this.editor.getBody().setAttribute('data-mce-placeholder', this.props.placeholder || '');
+      this.togglePlaceholder(this.editor);
+    }
+  }
+
   public componentWillUnmount(): void {
     if (this.editor) { tinymce.remove(`#${this.editorId}`); this.editor = null; }
+  }
+
+  private togglePlaceholder(ed: any): void {
+    const txt: string = (ed.getContent({ format: 'text' }) || '').trim();
+    const hasMedia: boolean = /<(img|table)/i.test(ed.getContent());
+    ed.dom.toggleClass(ed.getBody(), 'df-empty', !txt && !hasMedia);
   }
 
   private onImageUpload = (blobInfo: any, success: (url: string) => void, failure: (err: string) => void): void => {
@@ -86,11 +101,8 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
   }
 
   public render(): JSX.Element {
-    const isEmpty: boolean = !stripHtml(this.props.value || '');
     return (
       <div className={styles.editorHost}>
-        {isEmpty &&
-          <div className={styles.editorPlaceholder}>{this.props.placeholder}</div>}
         <textarea id={this.editorId} />
       </div>
     );
