@@ -5,6 +5,7 @@ declare interface IDiscussionFeedWebPartStrings {
   CommentsListLabel: string;
   AssetLibLabel: string;
   SkinUrlLabel: string;
+  EmojiUrlLabel: string;
   PageSizeLabel: string;
 }
 

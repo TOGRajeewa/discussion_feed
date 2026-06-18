@@ -17,6 +17,7 @@ export interface IClassicConfig {
   assetLibraryServerRelUrl?: string;
   tinymceSkinUrl?: string;
   fabricIconBaseUrl?: string;
+  emojiBaseUrl?: string;
   pageSize?: number;
 }
 
@@ -50,6 +51,7 @@ export function render(cfg: IClassicConfig): void {
     commentsListTitle: cfg.commentsListTitle || 'DiscussionComments',
     assetLibraryServerRelUrl: cfg.assetLibraryServerRelUrl || (webRel + '/SiteAssets'),
     tinymceSkinUrl: cfg.tinymceSkinUrl || (webRel + '/SiteAssets/tinymce/skins/lightgray'),
+    emojiBaseUrl: cfg.emojiBaseUrl || (webRel + '/SiteAssets/emoji/'),
     pageSize: cfg.pageSize || 20
   };
 
