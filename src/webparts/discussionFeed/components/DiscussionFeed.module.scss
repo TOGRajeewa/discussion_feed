@@ -204,15 +204,22 @@ $pageBg: #ffffff;
 .ppfOption { padding: 6px 8px; cursor: pointer; }
 .ppfOption:hover { background: #f3f2f1; }
 
-/* bottom toolbar */
+/* bottom toolbar — single compact row, hardened against SharePoint global button CSS */
 .composerBottom { display: flex; align-items: center; gap: 8px; }
-.composerToolbar { display: flex; align-items: center; gap: 2px; flex: 1; flex-wrap: wrap; }
-.catBtn { color: inherit; }
-.tbDivider { width: 1px; height: 22px; background: $cardBorder; margin: 0 6px; }
+.composerToolbar {
+  display: flex; align-items: center; gap: 3px; flex: 1 1 auto; flex-wrap: nowrap;
+  min-width: 0; overflow: hidden;
+}
+.catBtn {
+  width: 40px !important; height: 32px !important; margin: 0 !important; padding: 0 !important;
+}
+.tbDivider { flex: 0 0 auto; width: 1px; height: 22px; background: $cardBorder; margin: 0 5px; }
 .tbBtn {
-  background: none; border: none; cursor: pointer; padding: 6px; border-radius: 4px;
-  color: #444; font-size: 16px; line-height: 1;
-  i { font-size: 16px; }
+  flex: 0 0 auto;
+  width: 30px; height: 30px; margin: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; border-radius: 4px; color: #444;
+  i { font-size: 16px; line-height: 1; }
 }
 .tbBtn:hover { background: #f3f2f1; color: $burgundy; }
 

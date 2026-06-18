@@ -39,11 +39,12 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
     return {
       items: CATEGORY_DEFS.map(c => ({
         key: c.key,
-        text: c.label,
+        name: c.label,        // Fluent v5 uses `name` for the label (not `text`)
+        text: c.label,        // harmless on v5, future-proof for v6+
         iconProps: { iconName: c.iconName, style: { color: c.color } },
         onClick: () => this.props.onCategoryChange(c.key)
-      }))
-    };
+      }) as any)
+    } as IContextualMenuProps;
   }
 
   public render(): JSX.Element {
