@@ -26,6 +26,7 @@ export interface IPostSubmitBoxState {
   questionTitle: string;
   addedPeople: IMentionUser[];
   praisePeople: IMentionUser[];
+  attachedImages: { url: string; name: string }[];
   activeFormats: { [cmd: string]: boolean };
   submitting: boolean;
 }
@@ -41,7 +42,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   private empty(category: PostCategory): IPostSubmitBoxState {
     return {
       expanded: false, category, html: '', questionTitle: '',
-      addedPeople: [], praisePeople: [], activeFormats: {}, submitting: false
+      addedPeople: [], praisePeople: [], attachedImages: [], activeFormats: {}, submitting: false
     };
   }
 
@@ -71,8 +72,13 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   private onImage = (): void => {
     this.pickFile('image/*', async (f: File) => {
       const url: string = await uploadFeedImage(this.props.config.assetLibraryServerRelUrl, f);
-      this.insert(`<img src="${url}" alt="${f.name}" />`);
+      // collect as an attachment gallery (rendered as a grid), not inline in the text
+      this.setState({ attachedImages: this.state.attachedImages.concat([{ url, name: f.name }]) });
     });
+  }
+
+  private removeImage = (url: string): void => {
+    this.setState({ attachedImages: this.state.attachedImages.filter((im) => im.url !== url) });
   }
 
   private onAttach = (): void => {
@@ -94,20 +100,27 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
     if (this.state.submitting) { return false; }
     if (this.state.category === 'Question') { return !!this.state.questionTitle.trim(); }
     if (this.state.category === 'Praise') { return this.state.praisePeople.length > 0; }
-    return !!stripHtml(this.state.html);
+    return !!stripHtml(this.state.html) || this.state.attachedImages.length > 0;
+  }
+
+  private imageGallery(): string {
+    const imgs = this.state.attachedImages;
+    if (imgs.length === 0) { return ''; }
+    const tags: string = imgs.map((im) => `<img src="${im.url}" alt="${im.name}" />`).join('');
+    return `<div class="df-images" data-count="${imgs.length}">${tags}</div>`;
   }
 
   private composeBody(): string {
     const body: string = this.state.html || '';
+    let lead: string = body;
     if (this.state.category === 'Question') {
       const t: string = (this.state.questionTitle || '').replace(/</g, '&lt;');
-      return `<p><strong>${t}</strong></p>${body}`;
-    }
-    if (this.state.category === 'Praise') {
+      lead = `<p><strong>${t}</strong></p>${body}`;
+    } else if (this.state.category === 'Praise') {
       const names: string = this.state.praisePeople.map((p: IMentionUser) => `@${p.title}`).join(', ');
-      return `<p>🎉 <em>Praise for ${names}</em></p>${body}`;
+      lead = `<p>🎉 <em>Praise for ${names}</em></p>${body}`;
     }
-    return body;
+    return lead + this.imageGallery();
   }
 
   private submit = async (): Promise<void> => {
@@ -195,6 +208,21 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
             onReady={this.onReady}
             onFormatState={(s: { [cmd: string]: boolean }) => this.setState({ activeFormats: s })}
           />
+
+          {this.state.attachedImages.length > 0 &&
+            <div className={styles.composerImages}>
+              {this.state.attachedImages.map((im) => (
+                <div className={styles.composerImageThumb} key={im.url}>
+                  <img src={im.url} alt={im.name} />
+                  <button
+                    type="button"
+                    className={styles.composerImageX}
+                    title="Remove"
+                    onClick={() => this.removeImage(im.url)}
+                  >×</button>
+                </div>
+              ))}
+            </div>}
         </div>
 
         {/* Add people */}
