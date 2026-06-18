@@ -18,7 +18,7 @@ export const CATEGORY_DEFS: ICategoryDef[] = [
   {
     key: 'Discussion',
     label: 'Discussion',
-    iconName: 'OfficeChat',
+    iconName: 'Chat',
     color: '#d35400',
     badgeBg: '#eef2fb', badgeColor: '#3a55a3',
     bodyPlaceholder: 'Share thoughts, ideas, or updates',
