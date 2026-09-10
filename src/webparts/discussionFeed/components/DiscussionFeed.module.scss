@@ -364,15 +364,8 @@ $pageBg: #ffffff;
   color: $metaGray;
 }
 
-/* Delete affordance, rendered only for a Super Admin. The permission is what
-   actually stops anyone else -- this only hides a button that would fail. */
-.cardDelete {
-  position: absolute;
-  top: 0;
-  right: 0;
-  color: $metaGray;
-}
-.cardDelete:hover { color: #a4262c; }
+/* Delete affordances, rendered only for a Super Admin. The permission is what
+   actually stops anyone else -- these only hide controls that would fail. */
 .commentDelete {
   border: none;
   background: none;
@@ -468,3 +461,12 @@ $pageBg: #ffffff;
 :global(:root[data-theme='dark']) .modTab:hover { color: #e6edf3; }
 :global(:root[data-theme='dark']) .modTabs { border-bottom-color: #2d333b; }
 :global(:root[data-theme='dark']) .modActions { border-top-color: #2d333b; }
+:global(:root[data-theme='dark']) .commentDelete { color: #9ba4b0; }
+:global(:root[data-theme='dark']) .commentDelete:hover { color: #f1707b; }
+
+/* Delete sits beside Share in the engagement bar; the card corner is already
+   taken by the category badge. */
+.engDelete { color: #a4262c; margin-left: 18px; }
+.engDelete:hover { color: #7d1d22; }
+:global(:root[data-theme='dark']) .engDelete { color: #f1707b; }
+:global(:root[data-theme='dark']) .engDelete:hover { color: #ff9aa3; }

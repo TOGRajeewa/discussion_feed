@@ -6,12 +6,19 @@ export interface IEngagementBarProps {
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
+  /** Super Admin only — see ThreadCard.canDelete. */
+  canDelete: boolean;
   onLike: () => void;
   onToggleComments: () => void;
   onShare: () => void;
+  onDelete: () => void;
 }
 
-/** Likes (count) | Comments (count) | Share — matches the mockup's bottom bar. */
+/**
+ * Likes (count) | Comments (count) | Share — matches the mockup's bottom bar.
+ * Delete sits here beside Share rather than in the card corner, which the
+ * category badge already occupies.
+ */
 export function EngagementBar(props: IEngagementBarProps): JSX.Element {
   return (
     <div className={styles.engagement}>
@@ -36,6 +43,17 @@ export function EngagementBar(props: IEngagementBarProps): JSX.Element {
         <Icon iconName="Share" />
         <span>Share</span>
       </button>
+
+      {props.canDelete &&
+        <button
+          type="button"
+          className={`${styles.engItem} ${styles.engDelete}`}
+          title="Delete this post"
+          onClick={props.onDelete}
+        >
+          <Icon iconName="Delete" />
+          <span>Delete</span>
+        </button>}
     </div>
   );
 }

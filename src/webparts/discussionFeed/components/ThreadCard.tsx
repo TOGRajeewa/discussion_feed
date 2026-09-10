@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { IconButton } from 'office-ui-fabric-react/lib/Button';
 import styles from './DiscussionFeed.module.scss';
 import { CardHeader } from './CardHeader';
 import { EngagementBar } from './EngagementBar';
@@ -34,15 +33,6 @@ export class ThreadCard extends React.Component<IThreadCardProps, {}> {
 
     return (
       <div className={styles.card}>
-        {this.props.canDelete &&
-          <IconButton
-            className={styles.cardDelete}
-            iconProps={{ iconName: 'Delete' }}
-            title="Delete this post"
-            ariaLabel="Delete this post"
-            onClick={() => this.props.onDeletePost(p.id)}
-          />}
-
         <CardHeader
           name={p.authorTitle}
           dept={p.authorDept}
@@ -60,9 +50,11 @@ export class ThreadCard extends React.Component<IThreadCardProps, {}> {
           likeCount={p.likeUserIds.length}
           commentCount={p.commentCount}
           likedByMe={likedByMe}
+          canDelete={this.props.canDelete}
           onLike={() => this.props.onLike(p.id)}
           onToggleComments={() => this.props.onToggleComments(p.id)}
           onShare={() => this.props.onShare(p.id)}
+          onDelete={() => this.props.onDeletePost(p.id)}
         />
 
         {this.props.expanded &&
