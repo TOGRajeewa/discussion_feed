@@ -32,6 +32,22 @@ function ctx(): any {
  *   DiscussionFeedApp.render({ containerId: 'discussionFeedRoot' });
  */
 export function render(cfg: IClassicConfig): void {
+  mount(cfg, 'feed');
+}
+
+/**
+ * Review queue on its own, for the admin page:
+ *   DiscussionFeedApp.renderModeration({ containerId: 'feedModerationRoot' });
+ *
+ * Same bundle, so there is still one file to deploy. Renders a "no permission"
+ * message for anyone who is not an approver — and would show them an empty
+ * queue in any case, since SharePoint does not return pending items to them.
+ */
+export function renderModeration(cfg: IClassicConfig): void {
+  mount(cfg, 'moderation');
+}
+
+function mount(cfg: IClassicConfig, mode: 'feed' | 'moderation'): void {
   const c: any = ctx();
   const webUrl: string = c.webAbsoluteUrl || window.location.protocol + '//' + window.location.host;
   const webRel: string = c.webServerRelativeUrl || '';
@@ -70,7 +86,8 @@ export function render(cfg: IClassicConfig): void {
     React.createElement(DiscussionFeed as any, {
       config: feedConfig,
       spHttpClient: new ClassicHttpClient(webUrl),
-      pageUrl: window.location.href.split('#')[0]
+      pageUrl: window.location.href.split('#')[0],
+      mode
     }),
     el
   );

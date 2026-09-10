@@ -1,0 +1,42 @@
+<!--
+  Review queue on its own, for an admin page (e.g. /SitePages/Admin.aspx).
+
+  Same bundle as the feed — renderModeration() just opens on the queue instead
+  of the feed. Nothing extra to deploy.
+
+  Anyone who is not an approver sees "You do not have permission to review
+  posts." That message is a courtesy, not the control: SharePoint does not
+  return pending items to a user without the Approve Items permission, so the
+  queue would be empty for them regardless.
+
+  Approvers are:
+    * members of the site owners group (Super Admin — may also delete), and
+    * members of a "Dept Admins - <department>" group, who see only their own
+      departments' posts.
+
+  Bump ?v= whenever you upload a new bundle so browsers fetch the new file.
+-->
+<div id="feedModerationRoot"></div>
+
+<script type="text/javascript"
+        src="/SiteAssets/SiteComponents/discussion-feed/discussion-feed.bundle.js?v=20260910a"></script>
+
+<script type="text/javascript">
+  (function () {
+    function start() {
+      if (window.DiscussionFeedApp && window.DiscussionFeedApp.renderModeration) {
+        window.DiscussionFeedApp.renderModeration({
+          containerId: 'feedModerationRoot'
+          // --- optional overrides (defaults derive from the current web) ---
+          // , postsListTitle: 'DiscussionPosts'
+          // , commentsListTitle: 'DiscussionComments'
+          // , departmentsListTitle: 'Departments'
+          // , fabricIconBaseUrl: '/SiteAssets/SiteComponents/discussion-feed/fabric-icons/'
+        });
+      } else {
+        setTimeout(start, 50);   // wait for the bundle to finish downloading
+      }
+    }
+    start();
+  })();
+</script>

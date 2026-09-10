@@ -59,7 +59,9 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       hasNext: false,
       loadingMore: false,
       error: null,
-      tab: 'feed',
+      // Honoured only once the role resolves; a non-moderator is put back on
+      // the feed rather than left staring at an empty queue.
+      tab: props.mode === 'moderation' ? 'queue' : 'feed',
       role: NO_ROLE,
       myDepartment: null,
       allDepartments: [],
@@ -93,10 +95,10 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     // gets no role and no queue, which is the common case.
     try {
       const role: IModeratorRole = await this.mod.getRole();
-      this.setState({ role });
+      this.setState({ role, tab: role.canModerate ? this.state.tab : 'feed' });
       if (role.canModerate) { await this.refreshQueue(role, 0); }
     } catch (e) {
-      this.setState({ role: NO_ROLE });
+      this.setState({ role: NO_ROLE, tab: 'feed' });
     }
 
     // The composer only needs a department list when the profile lookup fails.
@@ -284,12 +286,22 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     }
 
     const role: IModeratorRole = this.state.role;
+    const queueOnly: boolean = this.props.mode === 'moderation' && role.canModerate;
+
+    if (this.props.mode === 'moderation' && !role.canModerate) {
+      return (
+        <div className={styles.feed}>
+          <h1 className={styles.pageHeading}>Pending review</h1>
+          <div className={styles.modEmpty}>You do not have permission to review posts.</div>
+        </div>
+      );
+    }
 
     return (
       <div className={styles.feed}>
-        <h1 className={styles.pageHeading}>Social Feed</h1>
+        <h1 className={styles.pageHeading}>{queueOnly ? 'Pending review' : 'Social Feed'}</h1>
 
-        {role.canModerate && this.renderTabs()}
+        {role.canModerate && !queueOnly && this.renderTabs()}
 
         {this.state.error &&
           <MessageBar

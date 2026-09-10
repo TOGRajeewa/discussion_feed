@@ -106,6 +106,14 @@ foreach ($a in $accounts) {
     @{ __metadata = @{ type = 'SP.Data.DiscussionLikesListItem' }; Title = 'test'; PostId = 1 } `
     @{ 'X-RequestDigest' = $d; Accept = 'application/json;odata=verbose' }
   Check "can add a row to DiscussionLikes" ($ld.Ok) "status $($ld.Status) -- $($ld.Content)"
+
+  # A like is the user's own row, so they can remove it -- unlike a post.
+  if ($ld.Ok) {
+    $likeId = ($ld.Content | ConvertFrom-Json -AsHashtable).d.Id
+    $undo = Call $c "/web/lists/getbytitle('DiscussionLikes')/items($likeId)" 'Post' $null `
+      @{ 'X-RequestDigest' = $d; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' }
+    Check "can remove their own like (unlike)" ($undo.Ok) "status $($undo.Status)"
+  }
 }
 
 # The test accounts cannot delete their own test posts -- that is the point of
