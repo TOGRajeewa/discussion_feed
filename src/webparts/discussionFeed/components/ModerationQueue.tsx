@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { PrimaryButton, DefaultButton } from 'office-ui-fabric-react/lib/Button';
+import { PrimaryButton } from 'office-ui-fabric-react/lib/Button';
 import { TextField } from 'office-ui-fabric-react/lib/TextField';
 import { Dropdown, IDropdownOption } from 'office-ui-fabric-react/lib/Dropdown';
 import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
@@ -118,21 +118,26 @@ export class ModerationQueue extends React.Component<IModerationQueueProps, IMod
             disabled={busy}
             onClick={() => this.approve(p.id)}
           />
-          <DefaultButton
-            text="Reject"
+          <button
+            type="button"
+            className={styles.modBtn}
             disabled={busy}
             onClick={() => this.setState({ rejectingId: rejecting ? null : p.id, reason: '' })}
-          />
+          >Reject</button>
           <span className={styles.modSpacer} />
           {/* Deleting outright is a Super Admin power (requirements 13, 14); a
               department admin can only reject, which keeps the post for audit. */}
           {this.props.role.isSuperAdmin &&
-            <DefaultButton
-              iconProps={{ iconName: 'Delete' }}
+            <button
+              type="button"
+              className={`${styles.modBtn} ${styles.modBtnDanger}`}
               title="Delete permanently"
               disabled={busy}
               onClick={() => this.remove(p.id)}
-            />}
+            >
+              <Icon iconName="Delete" />
+              <span>Delete</span>
+            </button>}
         </div>
 
         {rejecting &&

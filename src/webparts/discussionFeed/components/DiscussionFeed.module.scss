@@ -421,3 +421,50 @@ $pageBg: #ffffff;
   color: #8a6100;
 }
 .deptPromptSelect { min-width: 220px; }
+
+/* Moderation buttons are deliberately NOT Fabric DefaultButtons. The portal
+   hides those inside the home-page widget to suppress the feed's "Load more":
+     #social-corner .ms-Button--default { display: none !important; }
+   That rule assumes Load more is the only DefaultButton in the bundle, which
+   stopped being true once Reject and Delete existed. Owning the markup here
+   keeps the portal's assumption valid and our buttons visible. */
+.modBtn {
+  border: 1px solid $cardBorder;
+  background: #fff;
+  color: $nameBlack;
+  border-radius: 2px;
+  min-height: 32px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.modBtn:hover { background: #f3f2f1; }
+.modBtn:disabled { opacity: 0.5; cursor: default; }
+.modBtnDanger { color: #a4262c; border-color: #e6c9cb; }
+.modBtnDanger:hover { background: #fdf3f4; border-color: #a4262c; }
+
+/* The portal themes the feed for dark mode by targeting class-name prefixes it
+   knows about; it cannot know these, so they carry their own dark variants.
+   The portal sets data-theme on <html>, same signal the composer already uses. */
+:global(:root[data-theme='dark']) .modBtn {
+  background: transparent;
+  color: #e6edf3;
+  border-color: #2d333b;
+}
+:global(:root[data-theme='dark']) .modBtn:hover { background: rgba(255, 255, 255, 0.06); }
+:global(:root[data-theme='dark']) .modBtnDanger { color: #f1707b; border-color: #5a2a2f; }
+:global(:root[data-theme='dark']) .modBtnDanger:hover { background: rgba(241, 112, 123, 0.1); }
+
+:global(:root[data-theme='dark']) .modBanner { background: #2b2313; color: #e3c07b; }
+:global(:root[data-theme='dark']) .submittedNote { background: #16301c; border-color: #2c5334; color: #a7e0b4; }
+:global(:root[data-theme='dark']) .submittedNoteX { color: #a7e0b4; }
+:global(:root[data-theme='dark']) .deptPrompt { background: #2b2313; border-color: #4a3c1c; color: #e3c07b; }
+:global(:root[data-theme='dark']) .modEmpty { color: #9ba4b0; }
+:global(:root[data-theme='dark']) .modTab { color: #9ba4b0; }
+:global(:root[data-theme='dark']) .modTab:hover { color: #e6edf3; }
+:global(:root[data-theme='dark']) .modTabs { border-bottom-color: #2d333b; }
+:global(:root[data-theme='dark']) .modActions { border-top-color: #2d333b; }
