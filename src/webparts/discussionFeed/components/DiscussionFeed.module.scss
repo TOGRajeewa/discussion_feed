@@ -470,3 +470,30 @@ $pageBg: #ffffff;
 .engDelete:hover { color: #7d1d22; }
 :global(:root[data-theme='dark']) .engDelete { color: #f1707b; }
 :global(:root[data-theme='dark']) .engDelete:hover { color: #ff9aa3; }
+
+/* Native <select> for the department pickers. Fabric Dropdown was unusable
+   here: it paints itself white and portals its option list to document.body,
+   outside the widget, so neither our CSS nor the portal theme reaches it.
+   color-scheme is what makes the browser paint the OPEN option list dark --
+   without it the popup stays white however the closed control is styled. */
+.select {
+  min-width: 240px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: $nameBlack;
+  background: #fff;
+  border: 1px solid $cardBorder;
+  border-radius: 4px;
+  cursor: pointer;
+  color-scheme: light;
+}
+.select:focus { outline: none; border-color: $burgundy; }
+
+:global(:root[data-theme='dark']) .select {
+  color: #e6edf3;
+  background: #16202e;
+  border-color: #2d333b;
+  color-scheme: dark;
+}
+:global(:root[data-theme='dark']) .select:focus { border-color: #c44758; }

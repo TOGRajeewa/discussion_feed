@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { PrimaryButton } from 'office-ui-fabric-react/lib/Button';
 import { Icon } from 'office-ui-fabric-react/lib/Icon';
-import { Dropdown, IDropdownOption } from 'office-ui-fabric-react/lib/Dropdown';
 import { SPHttpClient } from '@microsoft/sp-http';
 import styles from './DiscussionFeed.module.scss';
 import { Avatar } from './Avatar';
@@ -195,21 +194,22 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
 
   private renderDepartmentPrompt(): JSX.Element {
     if (!this.needsDepartmentPick) { return null; }
-    const options: IDropdownOption[] = this.props.departmentOptions.map(
-      (d: IDepartment) => ({ key: d.id, text: d.title })
-    );
+    // Native select — see the note in ModerationQueue.renderFilter().
     return (
       <div className={styles.deptPrompt}>
         <Icon iconName="Info" />
         <span>We could not tell which department you are in. Please choose one so the right administrator reviews your post.</span>
-        <div className={styles.deptPromptSelect}>
-          <Dropdown
-            placeHolder="Select department"
-            selectedKey={this.state.pickedDeptId || undefined}
-            options={options}
-            onChanged={(o: IDropdownOption) => this.setState({ pickedDeptId: Number(o.key) })}
-          />
-        </div>
+        <select
+          className={`${styles.select} ${styles.deptPromptSelect}`}
+          value={this.state.pickedDeptId || ''}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+            this.setState({ pickedDeptId: Number(e.target.value) })}
+        >
+          <option value="" disabled={true}>Select department</option>
+          {this.props.departmentOptions.map((d: IDepartment) => (
+            <option key={d.id} value={d.id}>{d.title}</option>
+          ))}
+        </select>
       </div>
     );
   }

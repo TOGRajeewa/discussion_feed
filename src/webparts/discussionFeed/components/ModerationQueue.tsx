@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { PrimaryButton } from 'office-ui-fabric-react/lib/Button';
 import { TextField } from 'office-ui-fabric-react/lib/TextField';
-import { Dropdown, IDropdownOption } from 'office-ui-fabric-react/lib/Dropdown';
 import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
 import { Icon } from 'office-ui-fabric-react/lib/Icon';
 import styles from './DiscussionFeed.module.scss';
@@ -71,20 +70,23 @@ export class ModerationQueue extends React.Component<IModerationQueueProps, IMod
     // Only a Super Admin reviews across departments, so only they get a filter.
     if (!this.props.role.isSuperAdmin || this.props.role.departments.length === 0) { return null; }
 
-    const options: IDropdownOption[] = [{ key: 0, text: 'All departments' }].concat(
-      this.props.role.departments.map((d: IDepartment) => ({ key: d.id, text: d.title }))
-    );
-
+    // A native select rather than a Fabric Dropdown: Fabric paints itself white
+    // and portals its option list to document.body, outside the widget, so
+    // neither our styles nor the portal's theming reach it on a dark page.
     return (
       <div className={styles.modFilter}>
         <Icon iconName="Filter" />
-        <div style={{ minWidth: 260 }}>
-          <Dropdown
-            selectedKey={this.props.departmentId || 0}
-            options={options}
-            onChanged={(o: IDropdownOption) => this.props.onDepartmentChange(Number(o.key))}
-          />
-        </div>
+        <select
+          className={styles.select}
+          value={this.props.departmentId || 0}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+            this.props.onDepartmentChange(Number(e.target.value))}
+        >
+          <option value={0}>All departments</option>
+          {this.props.role.departments.map((d: IDepartment) => (
+            <option key={d.id} value={d.id}>{d.title}</option>
+          ))}
+        </select>
       </div>
     );
   }
