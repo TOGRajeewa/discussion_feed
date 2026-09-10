@@ -282,3 +282,142 @@ $pageBg: #ffffff;
 
 /* inline image emoji inside posts/composer */
 :global(img.df-emoji) { width: 1.3em; height: 1.3em; vertical-align: -0.25em; }
+
+/* ================= moderation ================= */
+
+/* Tabs across the top of the widget: "Feed" and, for moderators only,
+   "Pending review" with a count. */
+.modTabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 4px 14px;
+  border-bottom: 1px solid $cardBorder;
+}
+.modTab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-size: 14px;
+  color: $metaGray;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.modTab:hover { color: $nameBlack; }
+.modTabActive { color: $burgundy; border-bottom-color: $burgundy; font-weight: 600; }
+.modTabCount {
+  background: $burgundy;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  line-height: 1.6;
+}
+
+/* A pending post awaiting a decision. */
+.modCard { border-left: 3px solid #d29200; }
+.modCardRejected { border-left-color: #a4262c; }
+.modBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #8a6100;
+  background: #fff8e6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+}
+.modDept { color: $metaGray; font-size: 12.5px; }
+.modActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid $cardBorder;
+}
+.modSpacer { flex: 1; }
+.modReject {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.modRejectInput { flex: 1; }
+.modEmpty {
+  text-align: center;
+  color: $metaGray;
+  padding: 40px 16px;
+  font-size: 14px;
+}
+.modFilter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 14px;
+  font-size: 13px;
+  color: $metaGray;
+}
+
+/* Delete affordance, rendered only for a Super Admin. The permission is what
+   actually stops anyone else -- this only hides a button that would fail. */
+.cardDelete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: $metaGray;
+}
+.cardDelete:hover { color: #a4262c; }
+.commentDelete {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: $metaGray;
+  font-size: 11.5px;
+  padding: 0 4px;
+}
+.commentDelete:hover { color: #a4262c; text-decoration: underline; }
+
+/* Confirmation shown after a post is sent for review. */
+.submittedNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f3f9f4;
+  border: 1px solid #cfe7d4;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  color: #205c2b;
+  margin-bottom: 16px;
+}
+.submittedNoteX {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #205c2b;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+/* Department picker, shown only when the profile lookup cannot resolve one. */
+.deptPrompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #fff8e6;
+  border: 1px solid #f2dfae;
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #8a6100;
+}
+.deptPromptSelect { min-width: 220px; }

@@ -9,7 +9,10 @@ import { sanitize, timeAgo } from '../services/utils';
 export interface ICommentThreadProps {
   comments: IComment[];
   loading: boolean;
+  /** Super Admin only; see ThreadCard.canDelete. */
+  canDelete: boolean;
   onAdd: (html: string) => void;
+  onDelete: (commentId: number) => void;
 }
 
 export interface ICommentThreadState { draft: string; }
@@ -39,6 +42,13 @@ export class CommentThread extends React.Component<ICommentThreadProps, IComment
               <div>
                 <span className={styles.commentAuthor}>{c.authorTitle}</span>{' '}
                 <span className={styles.commentMeta}>• {timeAgo(c.created)}</span>
+                {this.props.canDelete &&
+                  <button
+                    type="button"
+                    className={styles.commentDelete}
+                    title="Delete this comment"
+                    onClick={() => this.props.onDelete(c.id)}
+                  >Delete</button>}
               </div>
               <div dangerouslySetInnerHTML={{ __html: sanitize(c.bodyHtml) }} />
             </div>

@@ -1,12 +1,20 @@
 import * as React from 'react';
 import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
 import { MessageBar, MessageBarType } from 'office-ui-fabric-react/lib/MessageBar';
+import { Icon } from 'office-ui-fabric-react/lib/Icon';
 import styles from './DiscussionFeed.module.scss';
 import { IDiscussionFeedProps } from './IDiscussionFeedProps';
 import { PostSubmitBox } from './PostSubmitBox';
 import { FeedList } from './FeedList';
+import { ModerationQueue } from './ModerationQueue';
 import { FeedService } from '../services/FeedService';
-import { IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts } from '../models';
+import { ModerationService } from '../services/ModerationService';
+import { DepartmentService } from '../services/DepartmentService';
+import {
+  IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole
+} from '../models';
+
+type FeedTab = 'feed' | 'queue';
 
 export interface IDiscussionFeedState {
   loading: boolean;
@@ -18,15 +26,29 @@ export interface IDiscussionFeedState {
   hasNext: boolean;
   loadingMore: boolean;
   error: string;
+  // --- moderation ---
+  tab: FeedTab;
+  role: IModeratorRole;
+  myDepartment: IDepartment;
+  allDepartments: IDepartment[];
+  pending: IPost[];
+  pendingLoading: boolean;
+  queueDeptId: number;
 }
+
+const NO_ROLE: IModeratorRole = { isSuperAdmin: false, departments: [], canModerate: false };
 
 export default class DiscussionFeed extends React.Component<IDiscussionFeedProps, IDiscussionFeedState> {
   private svc: FeedService;
+  private mod: ModerationService;
+  private depts: DepartmentService;
   private pager: IPagedPosts = null;   // current tail of the server-side page chain
 
   constructor(props: IDiscussionFeedProps) {
     super(props);
     this.svc = new FeedService(props.config);
+    this.mod = new ModerationService(props.config);
+    this.depts = new DepartmentService(props.config);
     this.state = {
       loading: true,
       posts: [],
@@ -36,7 +58,14 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       commentsLoading: {},
       hasNext: false,
       loadingMore: false,
-      error: null
+      error: null,
+      tab: 'feed',
+      role: NO_ROLE,
+      myDepartment: null,
+      allDepartments: [],
+      pending: [],
+      pendingLoading: false,
+      queueDeptId: 0
     };
   }
 
@@ -59,6 +88,38 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       // Keep currentUser so the composer still works; just surface the feed error.
       this.setState({ error: `Failed to load posts: ${e.message || e}`, loading: false });
     }
+
+    // Moderation context loads last and never blocks the feed: an ordinary user
+    // gets no role and no queue, which is the common case.
+    try {
+      const role: IModeratorRole = await this.mod.getRole();
+      this.setState({ role });
+      if (role.canModerate) { await this.refreshQueue(role, 0); }
+    } catch (e) {
+      this.setState({ role: NO_ROLE });
+    }
+
+    // The composer only needs a department list when the profile lookup fails.
+    try {
+      const mine: IDepartment = await this.depts.resolveForCurrentUser();
+      this.setState({ myDepartment: mine });
+      if (!mine) {
+        this.setState({ allDepartments: await this.depts.getDepartments() });
+      }
+    } catch (e) {
+      try { this.setState({ allDepartments: await this.depts.getDepartments() }); }
+      catch (e2) { /* composer will block on submit rather than misfile a post */ }
+    }
+  }
+
+  private async refreshQueue(role: IModeratorRole, deptId: number): Promise<void> {
+    this.setState({ pendingLoading: true });
+    try {
+      const pending: IPost[] = await this.mod.getPendingPosts(role, deptId || undefined);
+      this.setState({ pending, pendingLoading: false });
+    } catch (e) {
+      this.setState({ pending: [], pendingLoading: false, error: `Could not load the review queue: ${e.message || e}` });
+    }
   }
 
   private onLoadMore = async (): Promise<void> => {
@@ -77,9 +138,75 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     }
   }
 
+  /**
+   * The post lands as Pending, so there is deliberately no feed refresh here —
+   * refetching would return the same list and read as "nothing happened". The
+   * composer shows a confirmation instead. A moderator gets their queue count
+   * bumped, since their own submission may be theirs to review.
+   */
   private onSubmit = async (draft: IPostDraft): Promise<void> => {
     await this.svc.createPost(draft, this.props.pageUrl);
-    const page: IPagedPosts = await this.svc.getPostsFirstPage();   // reset to newest page
+    if (this.state.role.canModerate) {
+      await this.refreshQueue(this.state.role, this.state.queueDeptId);
+    }
+  }
+
+  private onApprove = async (postId: number): Promise<void> => {
+    try {
+      await this.mod.approve(postId);
+      // Drop it from the queue and pull the now-published post into the feed.
+      this.setState({ pending: this.state.pending.filter((p: IPost) => p.id !== postId) });
+      await this.reloadFeed();
+    } catch (e) {
+      this.setState({ error: `Could not approve that post: ${e.message || e}` });
+    }
+  }
+
+  private onReject = async (postId: number, reason: string): Promise<void> => {
+    try {
+      await this.mod.reject(postId, reason);
+      this.setState({ pending: this.state.pending.filter((p: IPost) => p.id !== postId) });
+    } catch (e) {
+      this.setState({ error: `Could not reject that post: ${e.message || e}` });
+    }
+  }
+
+  private onDeletePost = async (postId: number): Promise<void> => {
+    if (!window.confirm('Delete this post permanently? This cannot be undone.')) { return; }
+    try {
+      await this.mod.deletePost(postId);
+      this.setState({
+        posts: this.state.posts.filter((p: IPost) => p.id !== postId),
+        pending: this.state.pending.filter((p: IPost) => p.id !== postId)
+      });
+    } catch (e) {
+      this.setState({ error: `Could not delete that post: ${e.message || e}` });
+    }
+  }
+
+  private onDeleteComment = async (postId: number, commentId: number): Promise<void> => {
+    if (!window.confirm('Delete this comment permanently? This cannot be undone.')) { return; }
+    try {
+      await this.mod.deleteComment(commentId);
+      const left: IComment[] = (this.state.commentsByPost[postId] || [])
+        .filter((c: IComment) => c.id !== commentId);
+      this.setState({
+        commentsByPost: { ...this.state.commentsByPost, [postId]: left },
+        posts: this.state.posts.map((p: IPost) =>
+          p.id === postId ? { ...p, commentCount: Math.max(0, p.commentCount - 1) } : p)
+      });
+    } catch (e) {
+      this.setState({ error: `Could not delete that comment: ${e.message || e}` });
+    }
+  }
+
+  private onQueueDepartmentChange = async (deptId: number): Promise<void> => {
+    this.setState({ queueDeptId: deptId });
+    await this.refreshQueue(this.state.role, deptId);
+  }
+
+  private async reloadFeed(): Promise<void> {
+    const page: IPagedPosts = await this.svc.getPostsFirstPage();
     this.pager = page;
     this.setState({ posts: page.posts, hasNext: page.hasNext });
   }
@@ -156,9 +283,13 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       );
     }
 
+    const role: IModeratorRole = this.state.role;
+
     return (
       <div className={styles.feed}>
         <h1 className={styles.pageHeading}>Social Feed</h1>
+
+        {role.canModerate && this.renderTabs()}
 
         {this.state.error &&
           <MessageBar
@@ -166,27 +297,67 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
             onDismiss={() => this.setState({ error: null })}
           >{this.state.error}</MessageBar>}
 
-        <PostSubmitBox
-          currentUser={this.state.currentUser}
-          config={this.props.config}
-          spHttpClient={this.props.spHttpClient}
-          onSubmit={this.onSubmit}
-        />
+        {this.state.tab === 'queue'
+          ? <ModerationQueue
+              role={role}
+              posts={this.state.pending}
+              loading={this.state.pendingLoading}
+              departmentId={this.state.queueDeptId}
+              onDepartmentChange={this.onQueueDepartmentChange}
+              onApprove={this.onApprove}
+              onReject={this.onReject}
+              onDelete={this.onDeletePost}
+            />
+          : <div>
+              <PostSubmitBox
+                currentUser={this.state.currentUser}
+                config={this.props.config}
+                spHttpClient={this.props.spHttpClient}
+                department={this.state.myDepartment}
+                departmentOptions={this.state.allDepartments}
+                onSubmit={this.onSubmit}
+              />
 
-        <FeedList
-          posts={this.state.posts}
-          currentUserId={this.state.currentUser.id}
-          expandedPostId={this.state.expandedPostId}
-          commentsByPost={this.state.commentsByPost}
-          commentsLoading={this.state.commentsLoading}
-          hasNext={this.state.hasNext}
-          loadingMore={this.state.loadingMore}
-          onLoadMore={this.onLoadMore}
-          onLike={this.onLike}
-          onToggleComments={this.onToggleComments}
-          onAddComment={this.onAddComment}
-          onShare={this.onShare}
-        />
+              <FeedList
+                posts={this.state.posts}
+                currentUserId={this.state.currentUser.id}
+                expandedPostId={this.state.expandedPostId}
+                commentsByPost={this.state.commentsByPost}
+                commentsLoading={this.state.commentsLoading}
+                hasNext={this.state.hasNext}
+                loadingMore={this.state.loadingMore}
+                canDelete={role.isSuperAdmin}
+                onLoadMore={this.onLoadMore}
+                onLike={this.onLike}
+                onToggleComments={this.onToggleComments}
+                onAddComment={this.onAddComment}
+                onShare={this.onShare}
+                onDeletePost={this.onDeletePost}
+                onDeleteComment={this.onDeleteComment}
+              />
+            </div>}
+      </div>
+    );
+  }
+
+  private renderTabs(): JSX.Element {
+    const count: number = this.state.pending.length;
+    const tab = (key: FeedTab, label: string, icon: string, badge?: number): JSX.Element => (
+      <button
+        type="button"
+        className={`${styles.modTab} ${this.state.tab === key ? styles.modTabActive : ''}`}
+        onClick={() => this.setState({ tab: key })}
+      >
+        <Icon iconName={icon} />
+        <span>{label}</span>
+        {!!badge && <span className={styles.modTabCount}>{badge}</span>}
+      </button>
+    );
+
+    return (
+      <div className={styles.modTabs}>
+        {tab('feed', 'Feed', 'News')}
+        {tab('queue', 'Pending review', 'ClipboardList', count)}
       </div>
     );
   }

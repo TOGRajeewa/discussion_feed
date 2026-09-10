@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { PrimaryButton } from 'office-ui-fabric-react/lib/Button';
 import { Icon } from 'office-ui-fabric-react/lib/Icon';
+import { Dropdown, IDropdownOption } from 'office-ui-fabric-react/lib/Dropdown';
 import { SPHttpClient } from '@microsoft/sp-http';
 import styles from './DiscussionFeed.module.scss';
 import { Avatar } from './Avatar';
@@ -10,12 +11,18 @@ import { PeoplePickerField } from './PeoplePickerField';
 import { CATEGORY_DEFS, categoryDef } from './categories';
 import { uploadFeedImage } from '../services/UploadService';
 import { stripHtml } from '../services/utils';
-import { ICurrentUser, IMentionUser, IPostDraft, PostCategory, IFeedConfig } from '../models';
+import {
+  ICurrentUser, IMentionUser, IPostDraft, PostCategory, IFeedConfig, IDepartment
+} from '../models';
 
 export interface IPostSubmitBoxProps {
   currentUser: ICurrentUser;
   config: IFeedConfig;
   spHttpClient: SPHttpClient;
+  /** Resolved from the author's User Profile; null when it could not be matched. */
+  department: IDepartment;
+  /** Offered only when `department` is null, so a post is never left unroutable. */
+  departmentOptions: IDepartment[];
   onSubmit: (draft: IPostDraft) => Promise<void>;
 }
 
@@ -29,6 +36,10 @@ export interface IPostSubmitBoxState {
   attachedImages: { url: string; name: string }[];
   activeFormats: { [cmd: string]: boolean };
   submitting: boolean;
+  /** Author's choice when their profile department could not be resolved. */
+  pickedDeptId: number;
+  /** Set after a successful submit so the author knows it is not live yet. */
+  submitted: boolean;
 }
 
 export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSubmitBoxState> {
@@ -39,11 +50,25 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
     this.state = this.empty('Discussion');
   }
 
-  private empty(category: PostCategory): IPostSubmitBoxState {
+  private empty(category: PostCategory, submitted?: boolean): IPostSubmitBoxState {
     return {
       expanded: false, category, html: '', questionTitle: '',
-      addedPeople: [], praisePeople: [], attachedImages: [], activeFormats: {}, submitting: false
+      addedPeople: [], praisePeople: [], attachedImages: [], activeFormats: {}, submitting: false,
+      pickedDeptId: this.state ? this.state.pickedDeptId : 0,
+      submitted: !!submitted
     };
+  }
+
+  /** The department to file under: the profile match, else the author's pick. */
+  private get chosenDepartment(): IDepartment {
+    if (this.props.department) { return this.props.department; }
+    const picked: IDepartment[] = (this.props.departmentOptions || [])
+      .filter((d: IDepartment) => d.id === this.state.pickedDeptId);
+    return picked.length === 1 ? picked[0] : null;
+  }
+
+  private get needsDepartmentPick(): boolean {
+    return !this.props.department && (this.props.departmentOptions || []).length > 0;
   }
 
   private expand = (category: PostCategory): void => {
@@ -98,6 +123,9 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
 
   private get canSubmit(): boolean {
     if (this.state.submitting) { return false; }
+    // Without a department the post would sit in a queue no admin owns, so it
+    // cannot be submitted until one is resolved or chosen.
+    if (!this.chosenDepartment) { return false; }
     if (this.state.category === 'Question') { return !!this.state.questionTitle.trim(); }
     if (this.state.category === 'Praise') { return this.state.praisePeople.length > 0; }
     return !!stripHtml(this.state.html) || this.state.attachedImages.length > 0;
@@ -130,18 +158,66 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
       await this.props.onSubmit({
         html: this.composeBody(),
         category: this.state.category,
-        mentions: this.recipients
+        mentions: this.recipients,
+        department: this.chosenDepartment
       });
-      this.setState(this.empty('Discussion'));
+      // Collapse to the confirmation rather than to the feed: the post is
+      // Pending, so there is nothing for the author to see yet.
+      this.setState(this.empty('Discussion', true));
     } catch (e) {
       this.setState({ submitting: false });
     }
   }
 
   // ---- render ----
+  /**
+   * Every post now goes for review, so the author gets no optimistic insert
+   * into the feed. Saying so explicitly avoids the obvious support question:
+   * "I posted and nothing happened."
+   */
+  private renderSubmitted(): JSX.Element {
+    if (!this.state.submitted) { return null; }
+    return (
+      <div className={styles.submittedNote}>
+        <Icon iconName="Send" />
+        <div style={{ flex: 1 }}>
+          Sent for review. Your post will appear in the feed once an administrator approves it.
+        </div>
+        <button
+          type="button"
+          className={styles.submittedNoteX}
+          title="Dismiss"
+          onClick={() => this.setState({ submitted: false })}
+        >×</button>
+      </div>
+    );
+  }
+
+  private renderDepartmentPrompt(): JSX.Element {
+    if (!this.needsDepartmentPick) { return null; }
+    const options: IDropdownOption[] = this.props.departmentOptions.map(
+      (d: IDepartment) => ({ key: d.id, text: d.title })
+    );
+    return (
+      <div className={styles.deptPrompt}>
+        <Icon iconName="Info" />
+        <span>We could not tell which department you are in. Please choose one so the right administrator reviews your post.</span>
+        <div className={styles.deptPromptSelect}>
+          <Dropdown
+            placeHolder="Select department"
+            selectedKey={this.state.pickedDeptId || undefined}
+            options={options}
+            onChanged={(o: IDropdownOption) => this.setState({ pickedDeptId: Number(o.key) })}
+          />
+        </div>
+      </div>
+    );
+  }
+
   private renderCollapsed(): JSX.Element {
     return (
       <div className={`${styles.card} ${styles.submitBox}`}>
+        {this.renderSubmitted()}
         <div className={styles.collapsedRow}>
           <Avatar name={this.props.currentUser.title} picUrl={this.props.currentUser.picUrl} />
           <div className={styles.collapsedPlaceholder} onClick={() => this.expand('Discussion')}>
@@ -168,6 +244,8 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
         <div className={styles.composerTop}>
           <span className={styles.collapseLink} onClick={this.collapse}>Collapse</span>
         </div>
+
+        {this.renderDepartmentPrompt()}
 
         <div className={styles.composerArea} style={{ borderColor: def.color }}>
           {this.state.category !== 'Discussion' &&
@@ -249,7 +327,10 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
           />
           <PrimaryButton
             className={styles.postButton}
-            text={this.state.submitting ? '…' : def.submitLabel}
+            // "Post"/"Ask" would overpromise: the author is submitting for
+            // review, not publishing (requirement 5).
+            text={this.state.submitting ? '…' : 'Submit for review'}
+            title={`${def.submitLabel} — sent to your department administrator for approval`}
             disabled={!this.canSubmit}
             onClick={this.submit}
           />

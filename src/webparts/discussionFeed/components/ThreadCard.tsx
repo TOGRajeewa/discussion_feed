@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { IconButton } from 'office-ui-fabric-react/lib/Button';
 import styles from './DiscussionFeed.module.scss';
 import { CardHeader } from './CardHeader';
 import { EngagementBar } from './EngagementBar';
@@ -12,10 +13,18 @@ export interface IThreadCardProps {
   expanded: boolean;
   commentsLoading: boolean;
   comments: IComment[];
+  /**
+   * Whether to offer delete. Only a Super Admin can actually delete -- the
+   * permission level denies everyone else -- so this hides a control that
+   * would fail rather than granting anything.
+   */
+  canDelete: boolean;
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
   onShare: (postId: number) => void;
+  onDeletePost: (postId: number) => void;
+  onDeleteComment: (postId: number, commentId: number) => void;
 }
 
 export class ThreadCard extends React.Component<IThreadCardProps, {}> {
@@ -25,6 +34,15 @@ export class ThreadCard extends React.Component<IThreadCardProps, {}> {
 
     return (
       <div className={styles.card}>
+        {this.props.canDelete &&
+          <IconButton
+            className={styles.cardDelete}
+            iconProps={{ iconName: 'Delete' }}
+            title="Delete this post"
+            ariaLabel="Delete this post"
+            onClick={() => this.props.onDeletePost(p.id)}
+          />}
+
         <CardHeader
           name={p.authorTitle}
           dept={p.authorDept}
@@ -51,7 +69,9 @@ export class ThreadCard extends React.Component<IThreadCardProps, {}> {
           <CommentThread
             comments={this.props.comments}
             loading={this.props.commentsLoading}
+            canDelete={this.props.canDelete}
             onAdd={(html: string) => this.props.onAddComment(p.id, html)}
+            onDelete={(commentId: number) => this.props.onDeleteComment(p.id, commentId)}
           />
         }
       </div>

@@ -12,11 +12,14 @@ export interface IFeedListProps {
   commentsLoading: { [postId: number]: boolean };
   hasNext: boolean;
   loadingMore: boolean;
+  canDelete: boolean;
   onLoadMore: () => void;
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
   onShare: (postId: number) => void;
+  onDeletePost: (postId: number) => void;
+  onDeleteComment: (postId: number, commentId: number) => void;
 }
 
 export function FeedList(props: IFeedListProps): JSX.Element {
@@ -30,10 +33,13 @@ export function FeedList(props: IFeedListProps): JSX.Element {
           expanded={props.expandedPostId === p.id}
           commentsLoading={!!props.commentsLoading[p.id]}
           comments={props.commentsByPost[p.id] || []}
+          canDelete={props.canDelete}
           onLike={props.onLike}
           onToggleComments={props.onToggleComments}
           onAddComment={props.onAddComment}
           onShare={props.onShare}
+          onDeletePost={props.onDeletePost}
+          onDeleteComment={props.onDeleteComment}
         />
       ))}
 
