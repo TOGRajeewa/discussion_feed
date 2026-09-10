@@ -79,7 +79,7 @@ export class PeoplePickerField extends React.Component<IPeoplePickerFieldProps, 
           <input
             id={this.anchorId}
             className={styles.ppfInput}
-            placeholder={this.props.selected.length === 0 ? this.props.placeholder : 'Add people'}
+            placeholder={this.props.placeholder}
             value={this.state.query}
             onChange={this.onType}
           />

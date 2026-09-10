@@ -55,7 +55,11 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
         'body{font-family:Segoe UI,Arial,sans-serif;font-size:14.5px;color:#242424;line-height:1.5;margin:0;padding:10px 12px;position:relative;} ' +
         'body p{margin:0 0 8px;}' +   // zero the first paragraph top margin so the caret aligns with the placeholder
         'table{border-collapse:collapse;} td,th{border:1px solid #e1e1e1;padding:6px 8px;} img{max-width:100%;} ' +
-        '.df-empty:before{content:attr(data-mce-placeholder);color:#8a8886;position:absolute;top:10px;left:12px;pointer-events:none;}',
+        '.df-empty:before{content:attr(data-mce-placeholder);color:#8a8886;position:absolute;top:10px;left:12px;pointer-events:none;}' +
+        // the iframe body cannot inherit the portal theme, so mirror it explicitly
+        (document.documentElement.getAttribute('data-theme') === 'dark'
+          ? 'body{color:#e6edf3;background:#121b28;}td,th{border-color:#2d333b;}.df-empty:before{color:#9ba4b0;}'
+          : ''),
       setup: (ed: any) => {
         this.editor = ed;
         ed.on('init', () => {

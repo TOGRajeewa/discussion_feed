@@ -231,7 +231,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
           webUrl={cfg.webUrl}
           selected={this.state.addedPeople}
           onChange={(p: IMentionUser[]) => this.setState({ addedPeople: p })}
-          placeholder="Add people"
+          placeholder="@mention people"
           variant="inline"
         />
 
