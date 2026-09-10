@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy to test-accounts.local.json and fill in. That file is gitignored; this one is not, and must never hold real passwords.",
+  "testuser2": "",
+  "testuser3": "",
+  "commadmin": "",
+  "superadmin": "",
+  "spuser": "",
+  "spadmin": ""
+}

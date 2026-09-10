@@ -21,7 +21,8 @@ function Check([string] $desc, [bool] $ok, [string] $detail) {
   else     { $script:fail++; Write-Host "  FAIL  $desc" -ForegroundColor Red; Write-Host "        $detail" -ForegroundColor DarkGray }
 }
 
-function Cred($u, $p) { [pscredential]::new("$Domain\$u", (ConvertTo-SecureString $p -AsPlainText -Force)) }
+Import-Module (Join-Path $PSScriptRoot 'TestAccounts.psm1') -Force
+function Cred($u) { Get-TestCredential -User $u -Domain $Domain }
 
 function Get-Json($Cred, [string] $Path) {
   try {
@@ -33,8 +34,8 @@ function Get-Json($Cred, [string] $Path) {
   }
 }
 
-$plain = Cred 'testuser2' 'REDACTED'
-$admin = Cred 'spuser'    'REDACTED'
+$plain = Cred 'testuser2'
+$admin = Cred 'spuser'
 
 Write-Host "`n=== FeedService.getPostsFirstPage (as testuser2) ===" -ForegroundColor Cyan
 $feed = Get-Json $plain ("/web/lists/getbytitle('DiscussionPosts')/items" +

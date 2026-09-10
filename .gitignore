@@ -25,3 +25,6 @@ release/
 
 # emoji image assets (large; sourced separately, listed in emojiSet.ts)
 assets/emoji/*.png
+
+# Test-account passwords for the moderation suite. Never commit.
+provisioning/test-accounts.local.json

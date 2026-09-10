@@ -17,13 +17,12 @@ $SiteUrl = $SiteUrl.TrimEnd('/')
 
 # Test accounts, per the environment hand-over.
 $accounts = @(
-  @{ User = 'testuser2'; Pass = 'REDACTED'; Role = 'plain user (Communications)' }
-  @{ User = 'spuser';    Pass = 'REDACTED'; Role = 'dept admin (Bank Supervision)' }
+  @{ User = 'testuser2'; Role = 'plain user (Communications)' }
+  @{ User = 'spuser';    Role = 'dept admin (Bank Supervision)' }
 )
 
-function Cred($u, $p) {
-  [pscredential]::new("$Domain\$u", (ConvertTo-SecureString $p -AsPlainText -Force))
-}
+Import-Module (Join-Path $PSScriptRoot 'TestAccounts.psm1') -Force
+function Cred($u) { Get-TestCredential -User $u -Domain $Domain }
 
 function Call {
   param($Cred, [string] $Path, [string] $Method = 'Get', $Body, [hashtable] $Extra)
@@ -55,7 +54,7 @@ function Check([string] $desc, [bool] $ok, [string] $detail) {
 
 foreach ($a in $accounts) {
   Write-Host "`n=== $Domain\$($a.User) -- $($a.Role) ===" -ForegroundColor Cyan
-  $c = Cred $a.User $a.Pass
+  $c = Cred $a.User
 
   $who = Call $c '/web/currentuser'
   if (-not $who.Ok) { Check "can reach the site" $false $who.Content; continue }
