@@ -12,7 +12,12 @@
 #>
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
-  [string] $Domain = 'ad-him'
+  [string] $Domain = 'ad-him',
+  # A member of the site owners group. Supply the password to exercise Super
+  # Admin delete for real; without it the script falls back to asserting the
+  # permission grant, which is weaker.
+  [string] $SuperAdminUser = 'superadmin',
+  [string] $SuperAdminPassword
 )
 
 $ErrorActionPreference = 'Continue'
@@ -46,7 +51,8 @@ function Digest($Cred) { (Req $Cred '/contextinfo' 'Post').Data.FormDigestValue 
 $author     = Cred 'testuser2' 'REDACTED'    # ordinary user, Communications
 $commAdmin  = Cred 'commadmin' 'REDACTED'    # Dept Admins - Communications
 $otherAdmin = Cred 'spuser'    'REDACTED'   # Dept Admins - Bank Supervision
-$superAdmin = Cred 'spadmin'   'REDACTED'   # expected Super Admin
+$contentAdmin = Cred 'spadmin' 'REDACTED'   # Content Admin — NOT a site owner
+$superAdmin = if ($SuperAdminPassword) { Cred $SuperAdminUser $SuperAdminPassword } else { $null }
 
 # The department the post should be routed to, resolved the way the widget does.
 $depts = (Req $author "/web/lists/getbytitle('Departments')/items?`$select=Id,Title&`$top=500").Data.value
@@ -143,31 +149,63 @@ Check "department admin cannot delete" ($survived.Data.value.Count -eq 1) "the p
 
 # spadmin is in "Content Admin", not in the site owners group, so it must be
 # refused too -- Super Admin means the owners group and nothing else.
-$d6 = Digest $superAdmin
-Req $superAdmin "$POSTS/items($postId)" 'Post' $null `
+$d6 = Digest $contentAdmin
+Req $contentAdmin "$POSTS/items($postId)" 'Post' $null `
   @{ 'X-RequestDigest' = $d6; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' } | Out-Null
 $survived2 = Req $commAdmin "$POSTS/items?`$filter=Id eq $postId"
 Check "a non-owner admin account cannot delete either" ($survived2.Data.value.Count -eq 1) `
   "the post was deleted by an account outside the site owners group"
 
-# None of the supplied test accounts is in the site owners group, so the
-# positive case cannot be exercised end to end here. Assert the grant instead:
-# the owners group must hold Delete Items on the list.
 Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
 Connect-SPRest -SiteUrl $SiteUrl
 $owner = (Invoke-SPGet '/web?$expand=AssociatedOwnerGroup').AssociatedOwnerGroup
-$ras = (Invoke-SPGet "$POSTS/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=200").value
-$ownerRa = $ras | Where-Object { $_.Member.Id -eq $owner.Id } | Select-Object -First 1
-$mask = if ($ownerRa) { [int64]($ownerRa.RoleDefinitionBindings | Select-Object -First 1).BasePermissions.Low } else { 0 }
-Check "site owners group '$($owner.Title)' holds Delete Items on DiscussionPosts" `
-  (($mask -band 8) -ne 0) "permission mask Low=$mask"
-Write-Host "  NOTE: no supplied test account is in '$($owner.Title)', so Super Admin delete" -ForegroundColor Yellow
-Write-Host "        is verified by permission grant, not end to end. Add a test account to" -ForegroundColor Yellow
-Write-Host "        that group to close this gap." -ForegroundColor Yellow
 
-# Clean up as System Account, which can delete.
-try { Invoke-SPDelete "$POSTS/items($postId)"; Write-Host "  cleaned up test post $postId" -ForegroundColor DarkGray }
-catch { Write-Host "  could not clean up post $postId" -ForegroundColor Yellow }
+if ($superAdmin) {
+  # The account must be a group member but NOT a site collection admin, or the
+  # delete would prove nothing about the permission model.
+  $enc = [uri]::EscapeDataString("i:0#.w|$Domain\$SuperAdminUser")
+  $su = Invoke-SPGet "/web/siteusers/getbyloginname(@v)?@v='$enc'"
+  $suGroups = (Invoke-SPGet "/web/siteusers/getbyid($($su.Id))/groups?`$select=Title").value
+  Check "$SuperAdminUser is in '$($owner.Title)'" `
+    ((($suGroups | ForEach-Object { $_.Title }) -contains $owner.Title)) "groups: $(($suGroups | ForEach-Object { $_.Title }) -join ', ')"
+  Check "$SuperAdminUser is NOT a site collection admin" (-not $su.IsSiteAdmin) `
+    "IsSiteAdmin=$($su.IsSiteAdmin) — a delete by it would prove nothing"
+
+  $d7 = Digest $superAdmin
+  $sd = Req $superAdmin "$POSTS/items($postId)" 'Post' $null `
+    @{ 'X-RequestDigest' = $d7; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' }
+  $gone = Req $commAdmin "$POSTS/items?`$filter=Id eq $postId"
+  Check "Super Admin CAN delete" ($gone.Data.value.Count -eq 0) `
+    "delete status $($sd.Status); post $postId still present"
+
+  # Comments are Super-Admin-delete-only too (requirements 13, 14).
+  $anyComment = (Req $superAdmin "/web/lists/getbytitle('DiscussionComments')/items?`$select=Id&`$top=1").Data.value
+  if ($anyComment.Count -gt 0) {
+    $cid = $anyComment[0].Id
+    $dc = Digest $commAdmin
+    Req $commAdmin "/web/lists/getbytitle('DiscussionComments')/items($cid)" 'Post' $null `
+      @{ 'X-RequestDigest' = $dc; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' } | Out-Null
+    $stillThere = Req $commAdmin "/web/lists/getbytitle('DiscussionComments')/items?`$filter=Id eq $cid"
+    Check "department admin cannot delete a comment" ($stillThere.Data.value.Count -eq 1) `
+      "comment $cid was deleted by a non-Super-Admin"
+  }
+} else {
+  # Fall back to asserting the grant, which is weaker than exercising it.
+  $ras = (Invoke-SPGet "$POSTS/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=200").value
+  $ownerRa = $ras | Where-Object { $_.Member.Id -eq $owner.Id } | Select-Object -First 1
+  $mask = if ($ownerRa) { [int64]($ownerRa.RoleDefinitionBindings | Select-Object -First 1).BasePermissions.Low } else { 0 }
+  Check "site owners group '$($owner.Title)' holds Delete Items on DiscussionPosts" `
+    (($mask -band 8) -ne 0) "permission mask Low=$mask"
+  Write-Host "  NOTE: Super Admin delete asserted from the permission grant, not exercised." -ForegroundColor Yellow
+  Write-Host "        Re-run with -SuperAdminPassword to test it for real." -ForegroundColor Yellow
+}
+
+# Clean up whatever survived, as System Account.
+$left = (Invoke-SPGet "$POSTS/items?`$filter=Id eq $postId&`$select=Id" -AsHashtable).value
+if ($left.Count -gt 0) {
+  try { Invoke-SPDelete "$POSTS/items($postId)"; Write-Host "  cleaned up test post $postId" -ForegroundColor DarkGray }
+  catch { Write-Host "  could not clean up post $postId" -ForegroundColor Yellow }
+}
 
 Write-Host "`n$pass passed, $fail failed." -ForegroundColor $(if ($fail) { 'Red' } else { 'Green' })
 exit $(if ($fail) { 1 } else { 0 })
