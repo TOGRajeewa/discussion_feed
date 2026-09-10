@@ -35,6 +35,8 @@ export default class DiscussionFeedWebPart extends BaseClientSideWebPart<IDiscus
       webUrl: this.context.pageContext.web.absoluteUrl,
       postsListTitle: this.properties.postsListTitle || 'DiscussionPosts',
       commentsListTitle: this.properties.commentsListTitle || 'DiscussionComments',
+      likesListTitle: 'DiscussionLikes',
+      departmentsListTitle: 'Departments',
       assetLibraryServerRelUrl:
         this.properties.assetLibraryServerRelUrl ||
         `${this.context.pageContext.web.serverRelativeUrl}/FeedImages`.replace('//', '/'),

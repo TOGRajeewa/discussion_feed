@@ -1,7 +1,17 @@
 import { sp } from '@pnp/sp';
-import { IFeedConfig, IPost, IComment, IPostDraft, ICurrentUser, IPagedPosts } from '../models';
+import {
+  IFeedConfig, IPost, IComment, IPostDraft, ICurrentUser, IPagedPosts, ModerationStatus
+} from '../models';
 import { stripHtml, localPhotoUrl } from './utils';
 import { notifyMentions } from './MailService';
+
+/**
+ * Build an OData filter matching any of `ids` on `field`. SharePoint on-prem
+ * has no `in` operator, so this expands to a chain of `or` clauses.
+ */
+function anyOf(field: string, ids: number[]): string {
+  return ids.map((id: number) => `${field} eq ${id}`).join(' or ');
+}
 
 /**
  * Unwrap an expanded multi-value column. With the odata=verbose header an
@@ -38,10 +48,14 @@ export class FeedService {
   public async getPostsFirstPage(): Promise<IPagedPosts> {
     const page: any = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
       .select(
-        'Id', 'Title', 'Body', 'Category', 'Created', 'CommentCount',
-        'Author/Title', 'Author/EMail', 'Likes/Id'
+        'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
+        'Author/Title', 'Author/EMail'
       )
-      .expand('Author', 'Likes')
+      .expand('Author')
+      // Belt and braces: SharePoint already trims unapproved items out of the
+      // response for anyone without Approve Items, but an approver browsing the
+      // ordinary feed would otherwise see pending posts mixed in with live ones.
+      .filter(`OData__ModerationStatus eq ${ModerationStatus.Approved}`)
       .orderBy('Created', false)
       .top(this.cfg.pageSize)
       .getPaged();
@@ -49,14 +63,65 @@ export class FeedService {
     return this.wrapPage(page);
   }
 
-  private wrapPage(page: any): IPagedPosts {
+  private async wrapPage(page: any): Promise<IPagedPosts> {
+    const posts: IPost[] = (page.results || []).map((it: any) => this.mapPost(it));
+    await this.attachEngagement(posts);
     return {
-      posts: (page.results || []).map((it: any) => this.mapPost(it)),
+      posts,
       hasNext: !!page.hasNext,
       loadNext: page.hasNext
         ? async () => this.wrapPage(await page.getNext())
         : async () => ({ posts: [], hasNext: false, loadNext: null })
     };
+  }
+
+  /**
+   * Fill in likes and comment counts for a page of posts, two queries for the
+   * whole page rather than two per post.
+   *
+   * Both now live outside the post item. That is a requirement of content
+   * approval, not a preference: SharePoint returns an item to Pending whenever
+   * someone without Approve Items writes to it, so storing a like on the post
+   * would unpublish the post the moment anybody liked it.
+   */
+  private async attachEngagement(posts: IPost[]): Promise<void> {
+    if (posts.length === 0) { return; }
+    const ids: number[] = posts.map((p: IPost) => p.id);
+
+    const [likeRows, commentRows] = await Promise.all([
+      sp.web.lists.getByTitle(this.cfg.likesListTitle).items
+        .select('PostId', 'LikedBy/Id', 'Author/Id')
+        .expand('LikedBy', 'Author')
+        .filter(anyOf('PostId', ids))
+        .top(4000)
+        .get()
+        .catch(() => [] as any[]),
+      sp.web.lists.getByTitle(this.cfg.commentsListTitle).items
+        .select('PostLookupId')
+        .filter(anyOf('PostLookupId', ids))
+        .top(4000)
+        .get()
+        .catch(() => [] as any[])
+    ]);
+
+    const likesByPost: { [id: number]: number[] } = {};
+    (likeRows as any[]).forEach((r: any) => {
+      // The widget never writes LikedBy, so Author is the liker. LikedBy is
+      // only set on rows the one-off migration created on someone's behalf.
+      const uid: number = (r.LikedBy && r.LikedBy.Id) || (r.Author && r.Author.Id) || 0;
+      if (!uid) { return; }
+      (likesByPost[r.PostId] = likesByPost[r.PostId] || []).push(uid);
+    });
+
+    const countByPost: { [id: number]: number } = {};
+    (commentRows as any[]).forEach((r: any) => {
+      countByPost[r.PostLookupId] = (countByPost[r.PostLookupId] || 0) + 1;
+    });
+
+    posts.forEach((p: IPost) => {
+      p.likeUserIds = likesByPost[p.id] || [];
+      p.commentCount = countByPost[p.id] || 0;
+    });
   }
 
   private mapPost(it: any): IPost {
@@ -66,19 +131,23 @@ export class FeedService {
       bodyHtml: it.Body || '',
       category: (it.Category || 'Discussion'),
       authorTitle: it.Author ? it.Author.Title : 'Unknown',
-      // JobTitle is not an expandable property of the SP User field on-prem; omit it.
-      authorDept: '',
+      authorDept: it.Department || '',
+      authorDeptId: it.DepartmentId || 0,
       authorEmail: it.Author ? it.Author.EMail : '',
       authorPicUrl: it.Author ? localPhotoUrl(this.cfg.webUrl, it.Author.EMail, 'M') : '',
       created: it.Created,
-      likeUserIds: toArray(it.Likes).map((l: any) => l.Id),
-      commentCount: it.CommentCount || 0
+      likeUserIds: [],        // filled in by attachEngagement
+      commentCount: 0,
+      status: ModerationStatus.Approved,
+      moderationNote: ''
     };
   }
 
   /**
-   * Save a rich-text post, resolve mentions to SP user ids, fire the email.
-   * Returns the new post id.
+   * Submit a rich-text post for review. The item is created as Pending by
+   * SharePoint's content approval — the author has no way to publish it
+   * directly (requirements 1 and 5) — so this returns the id of something that
+   * is not yet, and may never be, visible to anyone else.
    */
   public async createPost(draft: IPostDraft, postUrlBase: string): Promise<number> {
     const snippet: string = stripHtml(draft.html).substring(0, 80) || 'Discussion';
@@ -89,29 +158,68 @@ export class FeedService {
       mentionIds.push(ensured.data.Id);
     }
 
-    const add = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.add({
+    const payload: any = {
       Title: snippet,
       Body: draft.html,                                  // Enhanced Rich Text column
       Category: draft.category,
-      MentionedUsersId: { results: mentionIds },         // people multi -> {results:[]}
-      CommentCount: 0
-    });
+      MentionedUsersId: { results: mentionIds }          // people multi -> {results:[]}
+    };
+    // Stamped now rather than looked up at review time, so that a later change
+    // to the author's profile cannot move a post between queues mid-review.
+    if (draft.department) {
+      payload.Department = draft.department.title;
+      payload.DepartmentId = draft.department.id;
+    }
+
+    const add = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.add(payload);
 
     const newId: number = add.data.Id;
+    // Mentions are notified on submission, as before. Whether the post is ever
+    // approved is a separate question the recipient will discover by following
+    // the link -- an unapproved post is not readable by them.
     await notifyMentions(draft.mentions, newId, snippet, `${postUrlBase}#post=${newId}`);
     return newId;
   }
 
-  /** Toggle the current user's like; returns the updated id roster for the UI. */
+  /**
+   * Toggle the current user's like by adding or removing a row in the likes
+   * list. Deliberately does NOT touch the post item: that would reset its
+   * approval status and pull an approved post out of the feed.
+   *
+   * Also fixes a lost update in the previous implementation, which read the
+   * whole roster and wrote it back — two people liking at once would drop one
+   * of the likes.
+   */
   public async toggleLike(postId: number, userId: number): Promise<number[]> {
-    const item = sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId);
-    const cur: any = await item.select('Likes/Id').expand('Likes').get();
-    const ids: number[] = toArray(cur.Likes).map((u: any) => u.Id);
-    const next: number[] = ids.indexOf(userId) > -1
-      ? ids.filter((i: number) => i !== userId)
-      : ids.concat([userId]);
-    await item.update({ LikesId: { results: next } });
-    return next;
+    const list = sp.web.lists.getByTitle(this.cfg.likesListTitle);
+
+    const mine: any[] = await list.items
+      .select('Id')
+      .filter(`PostId eq ${postId} and AuthorId eq ${userId}`)
+      .top(10)
+      .get();
+
+    if (mine.length > 0) {
+      for (let i = 0; i < mine.length; i++) {
+        await list.items.getById(mine[i].Id).delete();
+      }
+    } else {
+      await list.items.add({ Title: `Post ${postId}`, PostId: postId });
+    }
+
+    return this.getLikeUserIds(postId);
+  }
+
+  private async getLikeUserIds(postId: number): Promise<number[]> {
+    const rows: any[] = await sp.web.lists.getByTitle(this.cfg.likesListTitle).items
+      .select('LikedBy/Id', 'Author/Id')
+      .expand('LikedBy', 'Author')
+      .filter(`PostId eq ${postId}`)
+      .top(4000)
+      .get();
+    return rows
+      .map((r: any) => (r.LikedBy && r.LikedBy.Id) || (r.Author && r.Author.Id) || 0)
+      .filter((id: number) => !!id);
   }
 
   /** Lazy-load a thread's comments when a card is expanded. */
@@ -133,17 +241,18 @@ export class FeedService {
     }));
   }
 
-  /** Add a comment + bump the denormalized counter. */
+  /**
+   * Add a comment. The denormalized CommentCount bump this used to do has been
+   * removed: it was a write to the post item by an ordinary user, which under
+   * content approval would send the post back to Pending and make it vanish
+   * from the feed. Counts are derived in attachEngagement instead.
+   */
   public async addComment(postId: number, html: string): Promise<IComment> {
     const add = await sp.web.lists.getByTitle(this.cfg.commentsListTitle).items.add({
       Title: stripHtml(html).substring(0, 60),
       Body: html,
       PostLookupId: postId
     });
-
-    const post = sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId);
-    const c: any = await post.select('CommentCount').get();
-    await post.update({ CommentCount: (c.CommentCount || 0) + 1 });
 
     const created: any = await add.item.select('Id', 'Created', 'Author/Title', 'Author/EMail')
       .expand('Author').get();

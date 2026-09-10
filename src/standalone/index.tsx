@@ -14,6 +14,8 @@ export interface IClassicConfig {
   containerId: string;
   postsListTitle?: string;
   commentsListTitle?: string;
+  likesListTitle?: string;
+  departmentsListTitle?: string;
   assetLibraryServerRelUrl?: string;
   tinymceSkinUrl?: string;
   fabricIconBaseUrl?: string;
@@ -49,6 +51,8 @@ export function render(cfg: IClassicConfig): void {
     webUrl: webUrl,
     postsListTitle: cfg.postsListTitle || 'DiscussionPosts',
     commentsListTitle: cfg.commentsListTitle || 'DiscussionComments',
+    likesListTitle: cfg.likesListTitle || 'DiscussionLikes',
+    departmentsListTitle: cfg.departmentsListTitle || 'Departments',
     assetLibraryServerRelUrl: cfg.assetLibraryServerRelUrl || (webRel + '/SiteAssets'),
     tinymceSkinUrl: cfg.tinymceSkinUrl || (webRel + '/SiteAssets/tinymce/skins/lightgray'),
     emojiBaseUrl: cfg.emojiBaseUrl || (webRel + '/SiteAssets/emoji/'),
