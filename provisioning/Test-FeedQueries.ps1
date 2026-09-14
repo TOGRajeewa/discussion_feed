@@ -7,6 +7,7 @@
 
     .\Test-FeedQueries.ps1 -SiteUrl "http://124.43.17.138:9371"
 #>
+#Requires -Version 7.0
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [string] $Domain = 'ad-him'

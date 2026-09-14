@@ -10,8 +10,11 @@
 
     .\Test-ModerationFlow.ps1 -SiteUrl "http://124.43.17.138:9371"
 #>
+#Requires -Version 7.0
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
+  # Admin account for cleanup and permission checks; defaults to the signed-in user.
+  [pscredential] $Credential,
   [string] $Domain = 'ad-him',
   # A member of the site owners group. With its password available the script
   # exercises Super Admin delete for real; without it, it falls back to
@@ -157,7 +160,7 @@ Check "a non-owner admin account cannot delete either" ($survived2.Data.value.Co
   "the post was deleted by an account outside the site owners group"
 
 Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
-Connect-SPRest -SiteUrl $SiteUrl
+Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
 $owner = (Invoke-SPGet '/web?$expand=AssociatedOwnerGroup').AssociatedOwnerGroup
 
 if ($superAdmin) {

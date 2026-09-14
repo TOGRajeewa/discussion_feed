@@ -27,8 +27,10 @@
     .\Rollback-Moderation.ps1 -SiteUrl "http://..." -DryRun
     .\Rollback-Moderation.ps1 -SiteUrl "http://..." -PendingAction Delete -RestoreLikes
 #>
+#Requires -Version 7.0
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
+  [pscredential] $Credential,
   [ValidateSet('Report', 'Delete', 'Publish')] [string] $PendingAction = 'Report',
   [switch] $RestoreLikes,
   [switch] $DryRun
@@ -40,7 +42,7 @@ Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
 function Step($m) { Write-Host "  $m" -ForegroundColor Yellow }
 function Skip($m) { Write-Host "  - $m" -ForegroundColor DarkGray }
 
-Connect-SPRest -SiteUrl $SiteUrl
+Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed`n" -ForegroundColor Magenta }
 
 $posts = Invoke-SPGet "/web/lists/getbytitle('DiscussionPosts')?`$select=Id,Title,EnableModeration,DraftVersionVisibility"

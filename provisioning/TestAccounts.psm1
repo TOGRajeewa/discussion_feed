@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 <#
   Supplies credentials for the moderation test scripts WITHOUT putting them in
   the repository. Earlier revisions of those scripts had the test-account

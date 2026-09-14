@@ -7,8 +7,11 @@
 
     .\Test-Moderation.ps1 -SiteUrl "http://124.43.17.138:9371"
 #>
+#Requires -Version 7.0
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
+  # Admin account for cleanup and permission checks; defaults to the signed-in user.
+  [pscredential] $Credential,
   [string] $Domain = 'ad-him'
 )
 
@@ -120,7 +123,7 @@ foreach ($a in $accounts) {
 if ($leftovers.Count) {
   Write-Host "`nCleaning up test posts: $($leftovers -join ', ')" -ForegroundColor Cyan
   Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
-  Connect-SPRest -SiteUrl $SiteUrl
+  Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
   foreach ($id in $leftovers) {
     try { Invoke-SPDelete "/web/lists/getbytitle('DiscussionPosts')/items($id)"; Write-Host "  removed $id" -ForegroundColor DarkGray }
     catch { Write-Host "  could not remove $id -- $($_.Exception.Message)" -ForegroundColor Yellow }

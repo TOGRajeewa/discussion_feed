@@ -20,11 +20,18 @@
   Idempotent -- safe to re-run. Use -DryRun to print the plan and change
   nothing. Undo with Rollback-Moderation.ps1.
 
-    .\Provision-Moderation.ps1 -SiteUrl "http://124.43.17.138:9371" -DryRun
-    .\Provision-Moderation.ps1 -SiteUrl "http://124.43.17.138:9371"
+  Run with PowerShell 7 (pwsh), not Windows PowerShell 5.1.
+
+    pwsh .\Provision-Moderation.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
+    pwsh .\Provision-Moderation.ps1 -SiteUrl "https://mansaladev.cbsl.lk"
+
+    # as a specific domain account, when this machine's login is not one the farm accepts
+    pwsh .\Provision-Moderation.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -Credential (Get-Credential) -DryRun
 #>
+#Requires -Version 7.0
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
+  [pscredential] $Credential,
   [switch] $DryRun
 )
 
@@ -39,7 +46,7 @@ $plan = [System.Collections.Generic.List[string]]::new()
 function Step($msg) { $plan.Add($msg); Write-Host ("  " + $msg) -ForegroundColor Yellow }
 function Skip($msg) { Write-Host ("  - " + $msg) -ForegroundColor DarkGray }
 
-Connect-SPRest -SiteUrl $SiteUrl
+Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed`n" -ForegroundColor Magenta }
 
 # ---------------------------------------------------------------- 1. roles --

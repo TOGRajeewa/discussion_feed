@@ -12,15 +12,24 @@
   54 bytes larger than the source that still worked -- and that quietly cost
   a day of chasing a difference that did not exist.
 
+  Works for http:// and https:// sites; the WebDAV path is derived from the URL
+  (an https site maps to \\host@SSL\DavWWWRoot). Run with PowerShell 7 (pwsh).
+
     # dry run
-    .\Deploy-Bundle.ps1 -SiteHost "124.43.17.138" -Port 9371 -DryRun
+    pwsh .\Deploy-Bundle.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -NewVersion 20260914a -DryRun
 
     # deploy and bump the portal reference
-    .\Deploy-Bundle.ps1 -SiteHost "124.43.17.138" -Port 9371 -NewVersion 20260911a
+    pwsh .\Deploy-Bundle.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -NewVersion 20260914a
+
+  WebDAV authenticates as the signed-in Windows user; -Credential covers only
+  the final HTTP check. If the upload is refused, map the share once as the
+  right account first:  net use \\host@SSL\DavWWWRoot /user:CBSL\yourname
 #>
+#Requires -Version 7.0
 param(
-  [Parameter(Mandatory = $true)] [string] $SiteHost,
-  [int]    $Port = 80,
+  # Site root, e.g. https://mansaladev.cbsl.lk or http://124.43.17.138:9371
+  [Parameter(Mandatory = $true)] [string] $SiteUrl,
+  [pscredential] $Credential,
   [string] $BundlePath = (Join-Path $PSScriptRoot '..\dist-standalone\discussion-feed.bundle.js'),
   # Server-relative folder holding the bundle, no trailing slash.
   [string] $TargetFolder = 'SiteAssets/SiteComponents/discussion-feed',
@@ -34,7 +43,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$dav = "\\$SiteHost@$Port\DavWWWRoot"
+# Windows WebDAV redirector UNC form: \\host[@SSL][@port]\DavWWWRoot[\site\path]
+$uri = [Uri]$SiteUrl.TrimEnd('/')
+$isHttps = $uri.Scheme -eq 'https'
+$davHost = $uri.Host
+if ($isHttps) { $davHost += '@SSL' }
+if (-not $uri.IsDefaultPort) { $davHost += "@$($uri.Port)" }
+$sitePath = $uri.AbsolutePath.Trim('/') -replace '/', '\'
+$dav = "\\$davHost\DavWWWRoot" + $(if ($sitePath) { "\$sitePath" } else { '' })
+$base = $uri.GetLeftPart([UriPartial]::Path).TrimEnd('/')
 $bundleName = Split-Path $BundlePath -Leaf
 $remoteBundle = Join-Path $dav ($TargetFolder -replace '/', '\') | Join-Path -ChildPath $bundleName
 $remotePortal = Join-Path $dav ($PortalScript -replace '/', '\')
@@ -50,7 +67,9 @@ if ($DryRun) { Write-Host "`nDRY RUN - nothing will be changed" -ForegroundColor
 
 if (-not (Test-Path $BundlePath)) { throw "Bundle not found: $BundlePath. Build it first." }
 if (-not (Test-Path $dav)) {
-  throw "Cannot reach $dav. Check the host and port, that you are on the network, and that the WebClient service is running."
+  throw ("Cannot reach $dav. Check that you are on the client network, that the WebClient " +
+         "service is running (Get-Service WebClient), that this machine trusts the site's " +
+         "certificate for https, and that the signed-in account can open the site in a browser.")
 }
 
 # ------------------------------------------------------------- backup ------
@@ -125,13 +144,14 @@ if (-not $NewVersion) {
 
 # -------------------------------------------------------------- serve ------
 Write-Host "`n[4/4] Verify over HTTP" -ForegroundColor Cyan
-$base = "http://${SiteHost}:$Port"
 $url = "$base/$TargetFolder/$bundleName" + $(if ($NewVersion) { "?v=$NewVersion" } else { '' })
 if ($DryRun) {
   Note "would GET $url"
 } else {
   try {
-    $r = Invoke-WebRequest -Uri $url -UseDefaultCredentials -AllowUnencryptedAuthentication -ErrorAction Stop
+    $auth = @{ AllowUnencryptedAuthentication = $true }
+    if ($Credential) { $auth['Credential'] = $Credential } else { $auth['UseDefaultCredentials'] = $true }
+    $r = Invoke-WebRequest -Uri $url @auth -ErrorAction Stop
     Ok "$($r.StatusCode) from $url ($($r.RawContentLength) bytes)"
   } catch {
     Write-Host "  Could not fetch as the current user: $($_.Exception.Message)" -ForegroundColor Yellow
