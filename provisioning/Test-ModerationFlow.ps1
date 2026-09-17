@@ -202,6 +202,33 @@ if ($superAdmin) {
   Check "$SuperAdminUser is a Site Collection Administrator" ([bool]$su.IsSiteAdmin) `
     "IsSiteAdmin=$($su.IsSiteAdmin) — add it under Site settings > Site collection administrators"
 
+  # Super Admins review across every department too (requirement 3): submit a
+  # second post and have the Super Admin find and reject it.
+  $dA = Digest $author
+  $p2 = Req $author "$POSTS/items" 'Post' @{
+    __metadata = @{ type = 'SP.Data.DiscussionPostsListItem' }
+    Title = "$marker (super admin review)"; Body = '<p>super admin review</p>'; Category = 'Discussion'
+    Department = $comms.Title; DepartmentId = $comms.Id
+  } @{ 'X-RequestDigest' = $dA }
+  if ($p2.Ok) {
+    $p2Id = $p2.Data.Id
+    $saQueue = Req $superAdmin "$POSTS/items?`$filter=OData__ModerationStatus eq 2&`$select=Id&`$top=500"
+    Check "Super Admin sees pending posts from any department" `
+      (@($saQueue.Data.value | Where-Object { $_.Id -eq $p2Id }).Count -eq 1) "post $p2Id not in the Super Admin's view"
+    $dS = Digest $superAdmin
+    $rej = Req $superAdmin "$POSTS/items($p2Id)" 'Post' @{
+      __metadata = @{ type = 'SP.Data.DiscussionPostsListItem' }
+      OData__ModerationStatus = 1; OData__ModerationComments = 'automated test'
+    } @{ 'X-RequestDigest' = $dS; 'X-HTTP-Method' = 'MERGE'; 'IF-MATCH' = '*' }
+    $st = (Req $superAdmin "$POSTS/items($p2Id)?`$select=OData__ModerationStatus").Data.OData__ModerationStatus
+    Check "Super Admin can reject a post" ($rej.Ok -and $st -eq 1) "status $($rej.Status); moderation status now $st"
+    $dS2 = Digest $superAdmin
+    Req $superAdmin "$POSTS/items($p2Id)" 'Post' $null `
+      @{ 'X-RequestDigest' = $dS2; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' } | Out-Null
+  } else {
+    Check "second post submitted for Super Admin review" $false "status $($p2.Status)"
+  }
+
   $d7 = Digest $superAdmin
   $sd = Req $superAdmin "$POSTS/items($postId)" 'Post' $null `
     @{ 'X-RequestDigest' = $d7; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' }
