@@ -518,3 +518,32 @@ $pageBg: #ffffff;
   color-scheme: dark;
 }
 :global(:root[data-theme='dark']) .select:focus { border-color: #c44758; }
+
+/* ---- shared-post link (#post=<id>) ---- */
+/* The ring is a box-shadow because the portal forces the card's border colour
+   with an id-scoped !important rule. */
+.cardFocused { box-shadow: 0 0 0 2px $burgundy, 0 6px 18px rgba(155, 34, 66, 0.18); }
+:global(:root[data-theme='dark']) .cardFocused { box-shadow: 0 0 0 2px #c44758, 0 6px 18px rgba(0, 0, 0, 0.45); }
+
+.sharedWrap { margin-bottom: 26px; }
+.sharedHead {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 2px 8px; font-size: 13px;
+}
+.sharedLabel { display: inline-flex; align-items: center; gap: 6px; color: $burgundy; font-weight: 600; }
+.sharedClose {
+  border: 1px solid $cardBorder; background: #fff; color: $nameBlack; border-radius: 4px;
+  padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.sharedClose:hover { background: #f3f2f1; }
+.sharedNote {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 10px 14px; border-radius: 8px;
+  background: #f3f2f1; border: 1px solid $cardBorder; color: $nameBlack; font-size: 13.5px;
+}
+.sharedNoteText { flex: 1; min-width: 200px; }
+
+:global(:root[data-theme='dark']) .sharedLabel { color: #e8798f; }
+:global(:root[data-theme='dark']) .sharedClose { background: transparent; color: #e6edf3; border-color: #2d333b; }
+:global(:root[data-theme='dark']) .sharedClose:hover { background: rgba(255, 255, 255, 0.06); }
+:global(:root[data-theme='dark']) .sharedNote { background: #16202e; border-color: #2d333b; color: #e6edf3; }

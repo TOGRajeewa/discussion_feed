@@ -63,6 +63,31 @@ export class FeedService {
     return this.wrapPage(page);
   }
 
+  /**
+   * One post, for a shared "#post=<id>" link. Returns null when the post does
+   * not exist, cannot be read, or is not approved -- SharePoint already hides
+   * unapproved posts from non-approvers, and an approver following a share
+   * link should not see a pending post presented as if it were published.
+   */
+  public async getPostById(id: number): Promise<IPost> {
+    let it: any;
+    try {
+      it = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(id)
+        .select(
+          'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
+          'OData__ModerationStatus', 'Author/Title', 'Author/EMail'
+        )
+        .expand('Author')
+        .get();
+    } catch (e) {
+      return null;   // 404 (deleted) or access denied (not approved, not an approver)
+    }
+    if (!it || it.OData__ModerationStatus !== ModerationStatus.Approved) { return null; }
+    const post: IPost = this.mapPost(it);
+    await this.attachEngagement([post]);
+    return post;
+  }
+
   private async wrapPage(page: any): Promise<IPagedPosts> {
     const posts: IPost[] = (page.results || []).map((it: any) => this.mapPost(it));
     await this.attachEngagement(posts);

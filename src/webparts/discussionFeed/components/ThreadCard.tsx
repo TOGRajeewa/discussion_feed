@@ -18,6 +18,8 @@ export interface IThreadCardProps {
    * would fail rather than granting anything.
    */
   canDelete: boolean;
+  /** Outline the card -- used for the post a share link opened. */
+  highlight?: boolean;
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
@@ -61,7 +63,10 @@ export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardSta
     const likedByMe: boolean = p.likeUserIds.indexOf(this.props.currentUserId) > -1;
 
     return (
-      <div className={styles.card}>
+      <div
+        id={`df-post-${p.id}`}
+        className={`${styles.card} ${this.props.highlight ? styles.cardFocused : ''}`}
+      >
         <CardHeader
           name={p.authorTitle}
           dept={p.authorDept}

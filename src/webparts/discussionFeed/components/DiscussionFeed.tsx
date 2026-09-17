@@ -6,6 +6,7 @@ import styles from './DiscussionFeed.module.scss';
 import { IDiscussionFeedProps } from './IDiscussionFeedProps';
 import { PostSubmitBox } from './PostSubmitBox';
 import { FeedList } from './FeedList';
+import { ThreadCard } from './ThreadCard';
 import { ModerationQueue } from './ModerationQueue';
 import { FeedService } from '../services/FeedService';
 import { ModerationService } from '../services/ModerationService';
@@ -35,6 +36,17 @@ export interface IDiscussionFeedState {
   pending: IPost[];
   pendingLoading: boolean;
   queueDeptId: number;
+  // --- shared-post link (#post=<id>) ---
+  focusPostId: number;
+  /** The shared post when it is not already in `posts` (e.g. older than page one). */
+  focusPost: IPost;
+  focusStatus: 'loading' | 'ready' | 'missing';
+}
+
+/** The post id in a "#post=<id>" link, or null. */
+function postIdFromHash(): number {
+  const m: RegExpMatchArray = (window.location.hash || '').match(/(?:^#|&)post=(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 const NO_ROLE: IModeratorRole = { isSuperAdmin: false, departments: [], canModerate: false };
@@ -68,8 +80,62 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       allDepartments: [],
       pending: [],
       pendingLoading: false,
-      queueDeptId: 0
+      queueDeptId: 0,
+      focusPostId: null,
+      focusPost: null,
+      focusStatus: null
     };
+  }
+
+  public componentWillUnmount(): void {
+    window.removeEventListener('hashchange', this.onHashChange);
+  }
+
+  private onHashChange = (): void => {
+    const id: number = postIdFromHash();
+    if (id && id !== this.state.focusPostId) { this.openSharedPost(id); }
+  }
+
+  /**
+   * Show the post named in a share link pinned above the feed, with its
+   * comments open. It is looked up by id rather than searched for in the
+   * loaded page, so a post older than the first page still opens.
+   */
+  private async openSharedPost(id: number): Promise<void> {
+    this.setState({ tab: 'feed', focusPostId: id, focusPost: null, focusStatus: 'loading' });
+
+    const inList: IPost = this.state.posts.filter((p: IPost) => p.id === id)[0];
+    const post: IPost = inList || await this.svc.getPostById(id);
+    if (this.state.focusPostId !== id) { return; }   // superseded by another link
+
+    if (!post) {
+      this.setState({ focusStatus: 'missing' });
+      return;
+    }
+    this.setState({ focusPost: inList ? null : post, focusStatus: 'ready' });
+    if (this.state.expandedPostId !== id) { this.onToggleComments(id); }
+
+    setTimeout(() => {
+      const el: HTMLElement = document.getElementById(`df-post-${id}`);
+      if (el && el.scrollIntoView) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }, 60);
+  }
+
+  private closeSharedPost = (): void => {
+    this.setState({ focusPostId: null, focusPost: null, focusStatus: null });
+    // Drop the hash so a reload shows the normal feed.
+    if (postIdFromHash() && window.history && window.history.replaceState) {
+      window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+    }
+  }
+
+  /** Apply a change to a post wherever it is shown: the feed and/or the pinned card. */
+  private updatePost(postId: number, change: (p: IPost) => IPost): void {
+    this.setState({
+      posts: this.state.posts.map((p: IPost) => p.id === postId ? change(p) : p),
+      focusPost: this.state.focusPost && this.state.focusPost.id === postId
+        ? change(this.state.focusPost) : this.state.focusPost
+    });
   }
 
   public async componentDidMount(): Promise<void> {
@@ -91,6 +157,12 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       // Keep currentUser so the composer still works; just surface the feed error.
       this.setState({ error: `Failed to load posts: ${e.message || e}`, loading: false });
     }
+
+    // A shared link (#post=<id>): open that post now, and again whenever the
+    // hash changes without a reload (a second link opened in the same tab).
+    window.addEventListener('hashchange', this.onHashChange);
+    const sharedId: number = postIdFromHash();
+    if (sharedId && this.props.mode !== 'moderation') { this.openSharedPost(sharedId); }
 
     // Moderation context loads last and never blocks the feed: an ordinary user
     // gets no role and no queue, which is the common case.
@@ -182,6 +254,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
         posts: this.state.posts.filter((p: IPost) => p.id !== postId),
         pending: this.state.pending.filter((p: IPost) => p.id !== postId)
       });
+      if (this.state.focusPostId === postId) { this.closeSharedPost(); }
     } catch (e) {
       this.setState({ error: `Could not delete that post: ${e.message || e}` });
     }
@@ -193,11 +266,8 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       await this.mod.deleteComment(commentId);
       const left: IComment[] = (this.state.commentsByPost[postId] || [])
         .filter((c: IComment) => c.id !== commentId);
-      this.setState({
-        commentsByPost: { ...this.state.commentsByPost, [postId]: left },
-        posts: this.state.posts.map((p: IPost) =>
-          p.id === postId ? { ...p, commentCount: Math.max(0, p.commentCount - 1) } : p)
-      });
+      this.setState({ commentsByPost: { ...this.state.commentsByPost, [postId]: left } });
+      this.updatePost(postId, (p: IPost) => ({ ...p, commentCount: Math.max(0, p.commentCount - 1) }));
     } catch (e) {
       this.setState({ error: `Could not delete that comment: ${e.message || e}` });
     }
@@ -217,18 +287,13 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   private onLike = async (postId: number): Promise<void> => {
     // optimistic toggle
     const uid: number = this.state.currentUser.id;
-    this.setState({
-      posts: this.state.posts.map((p: IPost) => {
-        if (p.id !== postId) { return p; }
-        const liked: boolean = p.likeUserIds.indexOf(uid) > -1;
-        return { ...p, likeUserIds: liked ? p.likeUserIds.filter(i => i !== uid) : p.likeUserIds.concat([uid]) };
-      })
+    this.updatePost(postId, (p: IPost) => {
+      const liked: boolean = p.likeUserIds.indexOf(uid) > -1;
+      return { ...p, likeUserIds: liked ? p.likeUserIds.filter(i => i !== uid) : p.likeUserIds.concat([uid]) };
     });
     try {
       const ids: number[] = await this.svc.toggleLike(postId, uid);
-      this.setState({
-        posts: this.state.posts.map((p: IPost) => p.id === postId ? { ...p, likeUserIds: ids } : p)
-      });
+      this.updatePost(postId, (p: IPost) => ({ ...p, likeUserIds: ids }));
     } catch (e) {
       this.setState({ error: 'Could not save your like.' });
     }
@@ -256,10 +321,9 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       commentsByPost: {
         ...this.state.commentsByPost,
         [postId]: (this.state.commentsByPost[postId] || []).concat([comment])
-      },
-      posts: this.state.posts.map((p: IPost) =>
-        p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p)
+      }
     });
+    this.updatePost(postId, (p: IPost) => ({ ...p, commentCount: p.commentCount + 1 }));
   }
 
   /**
@@ -335,8 +399,13 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 onSubmit={this.onSubmit}
               />
 
+              {this.renderSharedPost()}
+
               <FeedList
-                posts={this.state.posts}
+                // The pinned post is not repeated further down.
+                posts={this.state.focusStatus === 'ready'
+                  ? this.state.posts.filter((p: IPost) => p.id !== this.state.focusPostId)
+                  : this.state.posts}
                 currentUserId={this.state.currentUser.id}
                 expandedPostId={this.state.expandedPostId}
                 commentsByPost={this.state.commentsByPost}
@@ -353,6 +422,55 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 onDeleteComment={this.onDeleteComment}
               />
             </div>}
+      </div>
+    );
+  }
+
+  /** The post a share link pointed at, pinned above the feed. */
+  private renderSharedPost(): JSX.Element {
+    const s = this.state;
+    if (!s.focusStatus) { return null; }
+
+    if (s.focusStatus === 'loading') {
+      return <div className={styles.sharedNote}><Spinner size={SpinnerSize.small} /><span>Opening shared post…</span></div>;
+    }
+
+    if (s.focusStatus === 'missing') {
+      return (
+        <div className={styles.sharedNote} role="status">
+          <Icon iconName="Info" />
+          <span className={styles.sharedNoteText}>
+            This post isn't available. It may have been removed, or it may still be waiting for approval.
+          </span>
+          <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Dismiss</button>
+        </div>
+      );
+    }
+
+    const post: IPost = s.focusPost || s.posts.filter((p: IPost) => p.id === s.focusPostId)[0];
+    if (!post) { return null; }
+
+    return (
+      <div className={styles.sharedWrap}>
+        <div className={styles.sharedHead}>
+          <span className={styles.sharedLabel}><Icon iconName="Link" /><span>Shared post</span></span>
+          <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Show all posts</button>
+        </div>
+        <ThreadCard
+          post={post}
+          highlight={true}
+          currentUserId={s.currentUser.id}
+          expanded={s.expandedPostId === post.id}
+          commentsLoading={!!s.commentsLoading[post.id]}
+          comments={s.commentsByPost[post.id] || []}
+          canDelete={s.role.isSuperAdmin}
+          onLike={this.onLike}
+          onToggleComments={this.onToggleComments}
+          onAddComment={this.onAddComment}
+          onShare={this.onShare}
+          onDeletePost={this.onDeletePost}
+          onDeleteComment={this.onDeleteComment}
+        />
       </div>
     );
   }

@@ -4,6 +4,7 @@ import { IFeedConfig } from '../models';
 export interface IDiscussionFeedProps {
   config: IFeedConfig;
   spHttpClient: SPHttpClient;
+  /** Page shared "#post=<id>" links point to (no hash). */
   pageUrl: string;
   /**
    * 'moderation' opens on the review queue and hides the composer and feed —

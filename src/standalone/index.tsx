@@ -21,10 +21,53 @@ export interface IClassicConfig {
   fabricIconBaseUrl?: string;
   emojiBaseUrl?: string;
   pageSize?: number;
+  /**
+   * Page that shared post links (Share, @mention emails) point to. Should be a
+   * page where the feed loads immediately -- see resolvePostPageUrl().
+   */
+  postPageUrl?: string;
 }
 
 function ctx(): any {
   return (window as any)._spPageContextInfo || {};
+}
+
+/**
+ * Where a shared "#post=<id>" link should land.
+ *
+ * On the CBSL home page the feed container is lazy (data-lazy="true"): the
+ * portal only downloads this bundle once the section is scrolled near, so a
+ * link to Home.aspx#post=42 opens a page on which nothing can react to the
+ * hash. The same section carries a "View all" link to the full feed page,
+ * which loads eagerly -- that is the right target.
+ *
+ * Order: explicit config, a data-post-page attribute on the container, the
+ * section's full-feed link when the container is lazily mounted, else this page.
+ */
+function resolvePostPageUrl(cfg: IClassicConfig, el: HTMLElement): string {
+  const here: string = window.location.href.split('#')[0];
+  const absolute = (href: string): string => {
+    const a: HTMLAnchorElement = document.createElement('a');
+    a.href = href;
+    return a.href.split('#')[0];
+  };
+
+  if (cfg.postPageUrl) { return absolute(cfg.postPageUrl); }
+
+  const attr: string = el.getAttribute('data-post-page');
+  if (attr) { return absolute(attr); }
+
+  if (el.getAttribute('data-lazy') === 'true') {
+    let node: HTMLElement = el.parentElement;
+    while (node && node.tagName !== 'SECTION') { node = node.parentElement; }
+    if (node) {
+      const links: NodeListOf<HTMLAnchorElement> = node.querySelectorAll('a[href]');
+      for (let i = 0; i < links.length; i++) {
+        if (/view\s*all/i.test(links[i].textContent || '')) { return absolute(links[i].getAttribute('href')); }
+      }
+    }
+  }
+  return here;
 }
 
 /**
@@ -86,7 +129,7 @@ function mount(cfg: IClassicConfig, mode: 'feed' | 'moderation'): void {
     React.createElement(DiscussionFeed as any, {
       config: feedConfig,
       spHttpClient: new ClassicHttpClient(webUrl),
-      pageUrl: window.location.href.split('#')[0],
+      pageUrl: resolvePostPageUrl(cfg, el),
       mode
     }),
     el
