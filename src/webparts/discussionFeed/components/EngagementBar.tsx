@@ -8,6 +8,8 @@ export interface IEngagementBarProps {
   likedByMe: boolean;
   /** Super Admin only — see ThreadCard.canDelete. */
   canDelete: boolean;
+  /** True briefly after a successful Share; swaps in a "Link copied" note. */
+  shareCopied: boolean;
   onLike: () => void;
   onToggleComments: () => void;
   onShare: () => void;
@@ -39,11 +41,23 @@ export function EngagementBar(props: IEngagementBarProps): JSX.Element {
         </button>
       </div>
 
-      <button type="button" className={`${styles.engItem} ${styles.engShare}`} onClick={props.onShare}>
-        <Icon iconName="Share" />
-        <span>Share</span>
+      {/* The confirmation takes the Share button's place, right where the user
+          clicked; aria-live announces it to screen readers. */}
+      <button
+        type="button"
+        className={`${styles.engItem} ${styles.engShare}`}
+        onClick={props.onShare}
+        aria-live="polite"
+      >
+        {props.shareCopied
+          ? <span className={styles.engShareDone}><Icon iconName="CheckMark" /><span>Link copied</span></span>
+          : [<Icon key="i" iconName="Share" />, <span key="t">Share</span>]}
       </button>
 
+      {/* Colour lives on the inner span: the portal forces the button's own
+          colour with an id-scoped !important rule, which an element's own
+          declaration still beats because the button's colour only reaches it
+          by inheritance. */}
       {props.canDelete &&
         <button
           type="button"
@@ -51,8 +65,7 @@ export function EngagementBar(props: IEngagementBarProps): JSX.Element {
           title="Delete this post"
           onClick={props.onDelete}
         >
-          <Icon iconName="Delete" />
-          <span>Delete</span>
+          <span className={styles.engDeleteLabel}><Icon iconName="Delete" /><span>Delete</span></span>
         </button>}
     </div>
   );

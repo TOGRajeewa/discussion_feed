@@ -3,7 +3,7 @@ import styles from './DiscussionFeed.module.scss';
 import { CardHeader } from './CardHeader';
 import { EngagementBar } from './EngagementBar';
 import { CommentThread } from './CommentThread';
-import { IPost, IComment } from '../models';
+import { IPost, IComment, IShareResult } from '../models';
 import { sanitize } from '../services/utils';
 
 export interface IThreadCardProps {
@@ -21,12 +21,41 @@ export interface IThreadCardProps {
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
-  onShare: (postId: number) => void;
+  onShare: (postId: number) => Promise<IShareResult>;
   onDeletePost: (postId: number) => void;
   onDeleteComment: (postId: number, commentId: number) => void;
 }
 
-export class ThreadCard extends React.Component<IThreadCardProps, {}> {
+export interface IThreadCardState {
+  /** Result of the last Share click, shown inside this card; null when hidden. */
+  share: IShareResult;
+}
+
+/** How long "Link copied" stays up. A failed copy stays until dismissed. */
+const SHARE_NOTE_MS: number = 3000;
+
+export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardState> {
+  private shareTimer: any = null;
+
+  constructor(props: IThreadCardProps) {
+    super(props);
+    this.state = { share: null };
+  }
+
+  public componentWillUnmount(): void {
+    if (this.shareTimer) { clearTimeout(this.shareTimer); }
+  }
+
+  private share = (): void => {
+    if (this.shareTimer) { clearTimeout(this.shareTimer); this.shareTimer = null; }
+    this.props.onShare(this.props.post.id).then((result: IShareResult) => {
+      this.setState({ share: result });
+      if (result.copied) {
+        this.shareTimer = setTimeout(() => { this.shareTimer = null; this.setState({ share: null }); }, SHARE_NOTE_MS);
+      }
+    });
+  }
+
   public render(): JSX.Element {
     const p: IPost = this.props.post;
     const likedByMe: boolean = p.likeUserIds.indexOf(this.props.currentUserId) > -1;
@@ -53,9 +82,30 @@ export class ThreadCard extends React.Component<IThreadCardProps, {}> {
           canDelete={this.props.canDelete}
           onLike={() => this.props.onLike(p.id)}
           onToggleComments={() => this.props.onToggleComments(p.id)}
-          onShare={() => this.props.onShare(p.id)}
+          shareCopied={!!this.state.share && this.state.share.copied}
+          onShare={this.share}
           onDelete={() => this.props.onDeletePost(p.id)}
         />
+
+        {/* Copy failed (e.g. the browser blocked clipboard access): hand the
+            link over for a manual copy instead of claiming success. */}
+        {this.state.share && !this.state.share.copied &&
+          <div className={styles.shareFallback} role="status">
+            <span>Couldn't copy automatically. Copy this link:</span>
+            <input
+              className={styles.shareFallbackInput}
+              readOnly={true}
+              value={this.state.share.url}
+              onFocus={(e: React.FocusEvent<HTMLInputElement>) => (e.target as HTMLInputElement).select()}
+              autoFocus={true}
+            />
+            <button
+              type="button"
+              className={styles.shareFallbackX}
+              title="Dismiss"
+              onClick={() => this.setState({ share: null })}
+            >×</button>
+          </div>}
 
         {this.props.expanded &&
           <CommentThread

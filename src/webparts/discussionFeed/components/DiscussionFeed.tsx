@@ -10,8 +10,9 @@ import { ModerationQueue } from './ModerationQueue';
 import { FeedService } from '../services/FeedService';
 import { ModerationService } from '../services/ModerationService';
 import { DepartmentService } from '../services/DepartmentService';
+import { copyText } from '../services/utils';
 import {
-  IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole
+  IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole, IShareResult
 } from '../models';
 
 type FeedTab = 'feed' | 'queue';
@@ -261,10 +262,14 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     });
   }
 
-  private onShare = (postId: number): void => {
+  /**
+   * Copies the post's link and reports the outcome back to the card that was
+   * clicked, which shows the confirmation in place -- not in the banner at the
+   * top of the widget, which may be scrolled far out of view.
+   */
+  private onShare = (postId: number): Promise<IShareResult> => {
     const url: string = `${this.props.pageUrl}#post=${postId}`;
-    if ((navigator as any).clipboard) { (navigator as any).clipboard.writeText(url); }
-    this.setState({ error: 'Link copied to clipboard.' });
+    return copyText(url).then((copied: boolean) => ({ copied, url }));
   }
 
   public render(): JSX.Element {

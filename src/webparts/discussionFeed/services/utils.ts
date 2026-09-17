@@ -43,3 +43,33 @@ export function timeAgo(iso: string): string {
   if (days < 7) { return `${days} days ago`; }
   return new Date(iso).toLocaleDateString();
 }
+
+/**
+ * Copy text to the clipboard; resolves true only if it actually got there.
+ *
+ * navigator.clipboard exists only in secure contexts (https or localhost), and
+ * the intranet farms are also reached over plain http, so fall back to the
+ * older select-and-copy route rather than claiming a copy that never happened.
+ */
+export function copyText(text: string): Promise<boolean> {
+  const nav: any = navigator as any;
+  if (nav.clipboard && (window as any).isSecureContext) {
+    return nav.clipboard.writeText(text).then(() => true, () => legacyCopy(text));
+  }
+  return Promise.resolve(legacyCopy(text));
+}
+
+function legacyCopy(text: string): boolean {
+  const ta: HTMLTextAreaElement = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '-1000px';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok: boolean = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}

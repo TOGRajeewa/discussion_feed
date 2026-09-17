@@ -2,7 +2,7 @@ import * as React from 'react';
 import { DefaultButton } from 'office-ui-fabric-react/lib/Button';
 import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
 import { ThreadCard } from './ThreadCard';
-import { IPost, IComment } from '../models';
+import { IPost, IComment, IShareResult } from '../models';
 
 export interface IFeedListProps {
   posts: IPost[];
@@ -17,7 +17,7 @@ export interface IFeedListProps {
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
-  onShare: (postId: number) => void;
+  onShare: (postId: number) => Promise<IShareResult>;
   onDeletePost: (postId: number) => void;
   onDeleteComment: (postId: number, commentId: number) => void;
 }

@@ -47,6 +47,12 @@ export interface IPost {
   moderationNote: string;
 }
 
+/** Outcome of the Share action, shown inside the post that was shared. */
+export interface IShareResult {
+  copied: boolean;
+  url: string;
+}
+
 /** A department, as listed in the Departments list. */
 export interface IDepartment {
   id: number;
