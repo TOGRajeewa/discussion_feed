@@ -62,6 +62,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     this.svc = new FeedService(props.config);
     this.mod = new ModerationService(props.config);
     this.depts = new DepartmentService(props.config);
+    const sharedId: number = props.mode === 'moderation' ? null : (postIdFromHash() || null);
     this.state = {
       loading: true,
       posts: [],
@@ -81,9 +82,11 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       pending: [],
       pendingLoading: false,
       queueDeptId: 0,
-      focusPostId: null,
+      // Start in the single-post view when opened from a share link, so the
+      // full feed never flashes up before the post loads.
+      focusPostId: sharedId,
       focusPost: null,
-      focusStatus: null
+      focusStatus: sharedId ? 'loading' : null
     };
   }
 
@@ -97,9 +100,9 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   }
 
   /**
-   * Show the post named in a share link pinned above the feed, with its
-   * comments open. It is looked up by id rather than searched for in the
-   * loaded page, so a post older than the first page still opens.
+   * Show only the post named in a share link, with its comments open. It is
+   * looked up by id rather than searched for in the loaded page, so a post
+   * older than the first page still opens.
    */
   private async openSharedPost(id: number): Promise<void> {
     this.setState({ tab: 'feed', focusPostId: id, focusPost: null, focusStatus: 'loading' });
@@ -114,11 +117,6 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     }
     this.setState({ focusPost: inList ? null : post, focusStatus: 'ready' });
     if (this.state.expandedPostId !== id) { this.onToggleComments(id); }
-
-    setTimeout(() => {
-      const el: HTMLElement = document.getElementById(`df-post-${id}`);
-      if (el && el.scrollIntoView) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    }, 60);
   }
 
   private closeSharedPost = (): void => {
@@ -366,6 +364,22 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       );
     }
 
+    // A share link shows that one post and nothing else: no composer, no
+    // review tabs, no feed. "Show all posts" leaves this view.
+    if (this.state.focusStatus && !queueOnly) {
+      return (
+        <div className={styles.feed}>
+          <h1 className={styles.pageHeading}>Social Feed</h1>
+          {this.state.error &&
+            <MessageBar
+              messageBarType={MessageBarType.info}
+              onDismiss={() => this.setState({ error: null })}
+            >{this.state.error}</MessageBar>}
+          {this.renderSharedPost()}
+        </div>
+      );
+    }
+
     return (
       <div className={styles.feed}>
         <h1 className={styles.pageHeading}>{queueOnly ? 'Pending review' : 'Social Feed'}</h1>
@@ -399,13 +413,8 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 onSubmit={this.onSubmit}
               />
 
-              {this.renderSharedPost()}
-
               <FeedList
-                // The pinned post is not repeated further down.
-                posts={this.state.focusStatus === 'ready'
-                  ? this.state.posts.filter((p: IPost) => p.id !== this.state.focusPostId)
-                  : this.state.posts}
+                posts={this.state.posts}
                 currentUserId={this.state.currentUser.id}
                 expandedPostId={this.state.expandedPostId}
                 commentsByPost={this.state.commentsByPost}
@@ -426,7 +435,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     );
   }
 
-  /** The post a share link pointed at, pinned above the feed. */
+  /** The post a share link pointed at, shown on its own. */
   private renderSharedPost(): JSX.Element {
     const s = this.state;
     if (!s.focusStatus) { return null; }
@@ -442,7 +451,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
           <span className={styles.sharedNoteText}>
             This post isn't available. It may have been removed, or it may still be waiting for approval.
           </span>
-          <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Dismiss</button>
+          <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Show all posts</button>
         </div>
       );
     }
