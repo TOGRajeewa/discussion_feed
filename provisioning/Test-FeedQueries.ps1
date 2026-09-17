@@ -86,8 +86,9 @@ if ($g.Ok) {
   Write-Host "  groups: $($titles -join ', ')" -ForegroundColor DarkGray
   Check "resolves at least one 'Dept Admins - *' membership" ($deptGroups.Count -gt 0) "none found"
 }
-$own = Get-Json $admin '/web?$expand=AssociatedOwnerGroup&$select=Title'
-Check "can read the site's owner group name" $own.Ok $own.Err
+$me = Get-Json $admin '/web/currentuser?$select=IsSiteAdmin'
+Check "can read own Site Collection Administrator flag (Super Admin check)" `
+  ($me.Ok -and $me.Data.ContainsKey('IsSiteAdmin')) $me.Err
 
 Write-Host "`n=== ModerationService.getPendingPosts (as spuser) ===" -ForegroundColor Cyan
 $pend = Get-Json $admin ("/web/lists/getbytitle('DiscussionPosts')/items" +

@@ -45,6 +45,14 @@ function Skip($m) { Write-Host "  - $m" -ForegroundColor DarkGray }
 Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed`n" -ForegroundColor Magenta }
 
+# Only site collection administrators can manage the feed lists once
+# provisioned, so only they can restore inheritance on them.
+$runner = Invoke-SPGet '/web/currentuser?$select=Title,IsSiteAdmin'
+if (-not $runner.IsSiteAdmin) {
+  $msg = "$($runner.Title) is not a Site Collection Administrator and cannot reset the feed lists' permissions. Run this as one, or pass -Credential."
+  if ($DryRun) { Write-Host "  WARNING: $msg" -ForegroundColor Yellow } else { throw $msg }
+}
+
 $posts = Invoke-SPGet "/web/lists/getbytitle('DiscussionPosts')?`$select=Id,Title,EnableModeration,DraftVersionVisibility"
 
 # ------------------------------------------------- 1. unapproved content ----

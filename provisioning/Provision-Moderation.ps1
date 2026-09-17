@@ -8,7 +8,9 @@
     * Pending/Rejected posts are security-trimmed by SharePoint itself, i.e.
       invisible through REST, list views and search to anyone without the
       Approve Items permission -- not merely hidden by the widget;
-    * only Site Owners can delete posts or comments;
+    * only Site Collection Administrators (the Super Admins) can delete posts
+      or comments -- every other principal, the site owners group included,
+      is left without Delete Items on the feed lists;
     * each department's existing "Dept Admins - <name>" group can approve.
 
   It also creates DiscussionLikes and migrates the existing Likes column into
@@ -48,6 +50,16 @@ function Skip($msg) { Write-Host ("  - " + $msg) -ForegroundColor DarkGray }
 
 Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
 if ($DryRun) { Write-Host "DRY RUN - nothing will be changed`n" -ForegroundColor Magenta }
+
+# After step 5 only site collection administrators can manage the feed lists.
+# Anyone else running this would lock themselves out mid-way and be unable to
+# roll back, so require one up front.
+$runner = Invoke-SPGet '/web/currentuser?$select=Title,IsSiteAdmin'
+if (-not $runner.IsSiteAdmin) {
+  $msg = "$($runner.Title) is not a Site Collection Administrator. Run this as one " +
+         "(Site settings > Site collection administrators), or pass -Credential for such an account."
+  if ($DryRun) { Write-Host "  WARNING: $msg" -ForegroundColor Yellow } else { throw $msg }
+}
 
 # ---------------------------------------------------------------- 1. roles --
 # Derive the two custom levels from the stock ones so we inherit whatever the
@@ -184,59 +196,80 @@ if ($posts.EnableModeration -and $posts.DraftVersionVisibility -eq 2) {
 # ---------------------------------------------------------- 5. permissions --
 Write-Host "`n[5/6] List permissions" -ForegroundColor Cyan
 
+# Super Admin = Site Collection Administrators. SharePoint exempts them from
+# list permissions, so they need no grant here -- and every other principal is
+# deliberately left WITHOUT Delete Items, which is what makes deleting
+# exclusive to them (requirements 13, 14). That includes the site owners group.
 $everyone = Invoke-SPGet ("/web/siteusers/getbyloginname(@v)?@v='" + [uri]::EscapeDataString('c:0(.s|true') + "'")
-$owners   = (Invoke-SPGet '/web?$expand=AssociatedOwnerGroup').AssociatedOwnerGroup
 $deptGroups = (Invoke-SPGet '/web/sitegroups?$select=Id,Title&$top=200').value |
                 Where-Object { $_.Title -like 'Dept Admins - *' }
-$fullControl = (RoleByName 'Full Control').Id
+$admins = (Invoke-SPGet "/web/siteusers?`$filter=IsSiteAdmin eq true&`$select=Title").value
 
-Write-Host "  principals: Everyone=$($everyone.Id)  Owners='$($owners.Title)'=$($owners.Id)  deptGroups=$($deptGroups.Count)" -ForegroundColor DarkGray
+Write-Host "  principals: Everyone=$($everyone.Id)  deptGroups=$($deptGroups.Count)" -ForegroundColor DarkGray
+Write-Host "  Super Admins (site collection administrators): $(($admins | ForEach-Object { $_.Title }) -join ', ')" -ForegroundColor DarkGray
 
-function Ensure-ListPerms {
-  param([string] $Title, [hashtable] $Assignments)   # principalId -> roleDefId
+<#
+  Makes a list's permissions exactly $Assignments (principalId -> roleDefId):
+  grants what is missing and REMOVES every other principal and role binding.
+  Removal matters because breaking inheritance by hand copies the site's
+  permissions, and any leftover Edit/Contribute/Approve/Full Control entry
+  carries Delete Items. "Limited Access" bindings are system-managed and left
+  alone.
+#>
+function Set-ListPerms {
+  param([string] $Title, [hashtable] $Assignments)
 
   $l = Invoke-SPGet "/web/lists/getbytitle('$Title')?`$select=Id,Title,HasUniqueRoleAssignments"
+  $current = @()
   if (-not $l.HasUniqueRoleAssignments) {
     Step "$Title -> break permission inheritance (no copy)"
     if (-not $DryRun) {
       Invoke-SPPost "/web/lists(guid'$($l.Id)')/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)" | Out-Null
+      $current = @((Invoke-SPGet "/web/lists(guid'$($l.Id)')/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=500").value)
     }
   } else {
     Skip "$Title already has unique permissions"
-  }
-  if ($DryRun) {
-    Step "$Title -> grant $($Assignments.Count) role assignment(s)"
-    return
+    $current = @((Invoke-SPGet "/web/lists(guid'$($l.Id)')/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=500").value)
   }
 
-  $current = (Invoke-SPGet "/web/lists(guid'$($l.Id)')/roleassignments?`$expand=RoleDefinitionBindings&`$top=200").value
+  # grant what is missing
   foreach ($principalId in $Assignments.Keys) {
     $rid = $Assignments[$principalId]
     $have = $current | Where-Object { $_.PrincipalId -eq [int]$principalId -and ($_.RoleDefinitionBindings.Id -contains [int]$rid) }
     if ($have) { Skip "$Title -> principal $principalId already holds role $rid"; continue }
     Step "$Title -> grant role $rid to principal $principalId"
-    Invoke-SPPost "/web/lists(guid'$($l.Id)')/roleassignments/addroleassignment(principalid=$principalId,roledefid=$rid)" | Out-Null
+    if (-not $DryRun) {
+      Invoke-SPPost "/web/lists(guid'$($l.Id)')/roleassignments/addroleassignment(principalid=$principalId,roledefid=$rid)" | Out-Null
+    }
+  }
+
+  # remove everything else
+  foreach ($ra in $current) {
+    $keep = $Assignments["$($ra.PrincipalId)"]
+    foreach ($b in @($ra.RoleDefinitionBindings)) {
+      if ($b.Name -eq 'Limited Access') { continue }
+      if ($keep -and [int]$b.Id -eq [int]$keep) { continue }
+      Step "$Title -> REMOVE '$($b.Name)' from '$($ra.Member.Title)'"
+      if (-not $DryRun) {
+        Invoke-SPPost "/web/lists(guid'$($l.Id)')/roleassignments/removeroleassignment(principalid=$($ra.PrincipalId),roledefid=$($b.Id))" | Out-Null
+      }
+    }
   }
 }
 
-# DiscussionPosts: staff may add + edit their own but never delete; every
-# department's admin group may approve; Site Owners keep Full Control (the
-# only principal that can delete -> requirements 13 and 14).
-$postAssign = @{ "$($everyone.Id)" = $roleContribute; "$($owners.Id)" = $fullControl }
+# DiscussionPosts: staff may add and edit but never delete; every department's
+# admin group may approve; nobody but site collection administrators deletes.
+$postAssign = @{ "$($everyone.Id)" = $roleContribute }
 foreach ($g in $deptGroups) { $postAssign["$($g.Id)"] = $roleApprove }
-Ensure-ListPerms -Title 'DiscussionPosts' -Assignments $postAssign
+Set-ListPerms -Title 'DiscussionPosts' -Assignments $postAssign
 
 # Comments are NOT moderated (the CR only restricts deleting them), so staff
-# get the same no-delete level and Owners keep Full Control.
-Ensure-ListPerms -Title 'DiscussionComments' -Assignments @{
-  "$($everyone.Id)" = $roleContribute; "$($owners.Id)" = $fullControl
-}
+# get the same no-delete level.
+Set-ListPerms -Title 'DiscussionComments' -Assignments @{ "$($everyone.Id)" = $roleContribute }
 
 # Likes must be deletable by their author -> stock Contribute, not Feed Contribute.
-if (-not $DryRun) {
-  Ensure-ListPerms -Title 'DiscussionLikes' -Assignments @{
-    "$($everyone.Id)" = (RoleByName 'Contribute').Id; "$($owners.Id)" = $fullControl
-  }
+if (-not $DryRun -or $likes) {
+  Set-ListPerms -Title 'DiscussionLikes' -Assignments @{ "$($everyone.Id)" = (RoleByName 'Contribute').Id }
 }
 
 # ------------------------------------------------------- 6. migrate likes ---

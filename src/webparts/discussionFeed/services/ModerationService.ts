@@ -22,9 +22,25 @@ export class ModerationService {
 
   constructor(private cfg: IFeedConfig) { }
 
-  /** Super Admin = a member of the site's owners group (requirement 3). */
+  /**
+   * Super Admin = a Site Collection Administrator (requirements 3, 13, 14).
+   *
+   * SharePoint exempts site collection administrators from list permissions,
+   * so they can already delete and approve anything; keying the role off the
+   * same flag keeps the Delete buttons in step with what the server allows.
+   * Provision-Moderation.ps1 correspondingly gives nobody else Delete Items on
+   * the feed lists.
+   */
   public async getRole(): Promise<IModeratorRole> {
     if (this.roleCache) { return this.roleCache; }
+
+    let isSuperAdmin: boolean = false;
+    try {
+      const me: any = await sp.web.currentUser.select('IsSiteAdmin').get();
+      isSuperAdmin = !!(me && me.IsSiteAdmin);
+    } catch (e) {
+      isSuperAdmin = false;
+    }
 
     let groupTitles: string[] = [];
     try {
@@ -35,16 +51,6 @@ export class ModerationService {
       // an ordinary user, not an error worth surfacing.
       groupTitles = [];
     }
-
-    let ownerTitle: string = '';
-    try {
-      const owners: any = await sp.web.associatedOwnerGroup.select('Title').get();
-      ownerTitle = owners ? owners.Title : '';
-    } catch (e) {
-      ownerTitle = '';
-    }
-
-    const isSuperAdmin: boolean = !!ownerTitle && groupTitles.indexOf(ownerTitle) > -1;
 
     // A Super Admin reviews across the whole platform, so they get every
     // department; a department admin gets only the ones they administer.

@@ -16,10 +16,13 @@ param(
   # Admin account for cleanup and permission checks; defaults to the signed-in user.
   [pscredential] $Credential,
   [string] $Domain = 'ad-him',
-  # A member of the site owners group. With its password available the script
-  # exercises Super Admin delete for real; without it, it falls back to
-  # asserting the permission grant, which is weaker.
-  [string] $SuperAdminUser = 'superadmin'
+  # A Site Collection Administrator (the Super Admin). With its password
+  # available the script exercises Super Admin delete for real.
+  [string] $SuperAdminUser = 'superadmin',
+  # A second ORDINARY user (no "Dept Admins - …" group, not a site collection
+  # admin) used to confirm pending posts are invisible. An approver can see
+  # every pending post, so using one here fails the invisibility checks.
+  [string] $ObserverUser = 'testuser3'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -57,6 +60,21 @@ $otherAdmin = Cred 'spuser'   # Dept Admins - Bank Supervision
 $contentAdmin = Cred 'spadmin'   # Content Admin — NOT a site owner
 $superAdmin = if (Test-TestCredential -User $SuperAdminUser) { Cred $SuperAdminUser } else { $null }
 
+# The invisibility checks need an observer who is NOT an approver: approvers
+# (department admins, site collection admins) can see every pending post by
+# design. Skip those checks, rather than fail them, when the observer is one.
+$obsMe = (Req (Cred $ObserverUser) '/web/currentuser?$select=IsSiteAdmin').Data
+$obsGroups = @((Req (Cred $ObserverUser) '/web/currentuser/groups?$select=Title').Data.value | ForEach-Object { $_.Title })
+$observerIsApprover = [bool]$obsMe.IsSiteAdmin -or [bool]($obsGroups | Where-Object { $_ -like 'Dept Admins - *' })
+$skipped = 0
+function CheckObserver([string] $desc, [bool] $ok, [string] $detail) {
+  if ($observerIsApprover) {
+    $script:skipped++
+    Write-Host "  SKIP  $desc" -ForegroundColor Yellow
+    Write-Host "        '$ObserverUser' is an approver, so it can see pending posts. Pass -ObserverUser <an ordinary user>." -ForegroundColor DarkGray
+  } else { Check $desc $ok $detail }
+}
+
 # The department the post should be routed to, resolved the way the widget does.
 $depts = (Req $author "/web/lists/getbytitle('Departments')/items?`$select=Id,Title&`$top=500").Data.value
 $comms = $depts | Where-Object { $_.Title -eq 'Communications' } | Select-Object -First 1
@@ -81,11 +99,11 @@ Check "department stamped on the item" ($add.Data.DepartmentId -eq $comms.Id) "D
 
 # --- 2. invisibility -------------------------------------------------------
 Write-Host "`n[2] the pending post must not be visible to other users" -ForegroundColor Cyan
-$asOther = Req (Cred 'testuser3') "$POSTS/items?`$filter=Id eq $postId"
-Check "another ordinary user cannot read it" ($asOther.Ok -and $asOther.Data.value.Count -eq 0) `
+$asOther = Req (Cred $ObserverUser) "$POSTS/items?`$filter=Id eq $postId"
+CheckObserver "another ordinary user cannot read it" ($asOther.Ok -and $asOther.Data.value.Count -eq 0) `
   "returned $($asOther.Data.value.Count) row(s)"
 
-$feed = Req (Cred 'testuser3') "$POSTS/items?`$filter=OData__ModerationStatus eq 0&`$top=200"
+$feed = Req (Cred $ObserverUser) "$POSTS/items?`$filter=OData__ModerationStatus eq 0&`$top=200"
 $inFeed = @($feed.Data.value | Where-Object { $_.Id -eq $postId }).Count
 Check "it is absent from the approved feed" ($inFeed -eq 0) "found $inFeed"
 
@@ -110,8 +128,8 @@ $d2 = Digest $author
 $selfApprove = Req $author "$POSTS/items($postId)" 'Post' @{
   __metadata = @{ type = 'SP.Data.DiscussionPostsListItem' }; OData__ModerationStatus = 0
 } @{ 'X-RequestDigest' = $d2; 'X-HTTP-Method' = 'MERGE'; 'IF-MATCH' = '*' }
-$stillHidden = Req (Cred 'testuser3') "$POSTS/items?`$filter=Id eq $postId"
-Check "self-approval does not publish the post" ($stillHidden.Data.value.Count -eq 0) `
+$stillHidden = Req (Cred $ObserverUser) "$POSTS/items?`$filter=Id eq $postId"
+CheckObserver "self-approval does not publish the post" ($stillHidden.Data.value.Count -eq 0) `
   "self-approve returned $($selfApprove.Status); post is now visible to others"
 
 # --- 5. approve ------------------------------------------------------------
@@ -122,23 +140,23 @@ $ap = Req $commAdmin "$POSTS/items($postId)" 'Post' @{
 } @{ 'X-RequestDigest' = $d3; 'X-HTTP-Method' = 'MERGE'; 'IF-MATCH' = '*' }
 Check "approve succeeds" $ap.Ok "status $($ap.Status) $($ap.Err)"
 
-$after = Req (Cred 'testuser3') "$POSTS/items?`$filter=Id eq $postId&`$select=Id,OData__ModerationStatus"
+$after = Req (Cred $ObserverUser) "$POSTS/items?`$filter=Id eq $postId&`$select=Id,OData__ModerationStatus"
 Check "the approved post is now visible to other users" ($after.Data.value.Count -eq 1) `
   "returned $($after.Data.value.Count) row(s)"
 
 # --- 6. liking must not unpublish -----------------------------------------
 Write-Host "`n[6] liking an approved post must not send it back to Pending" -ForegroundColor Cyan
-$d4 = Digest (Cred 'testuser3')
-$like = Req (Cred 'testuser3') "/web/lists/getbytitle('DiscussionLikes')/items" 'Post' @{
+$d4 = Digest (Cred $ObserverUser)
+$like = Req (Cred $ObserverUser) "/web/lists/getbytitle('DiscussionLikes')/items" 'Post' @{
   __metadata = @{ type = 'SP.Data.DiscussionLikesListItem' }; Title = "Post $postId"; PostId = $postId
 } @{ 'X-RequestDigest' = $d4 }
 Check "like recorded" $like.Ok "status $($like.Status)"
-$stillUp = Req (Cred 'testuser3') "$POSTS/items?`$filter=Id eq $postId and OData__ModerationStatus eq 0"
+$stillUp = Req (Cred $ObserverUser) "$POSTS/items?`$filter=Id eq $postId and OData__ModerationStatus eq 0"
 Check "post is still Approved after being liked" ($stillUp.Data.value.Count -eq 1) `
   "the post left the feed -- likes are writing to the post item again"
 if ($like.Ok) {
-  $ld = Digest (Cred 'testuser3')
-  Req (Cred 'testuser3') "/web/lists/getbytitle('DiscussionLikes')/items($($like.Data.Id))" 'Post' $null `
+  $ld = Digest (Cred $ObserverUser)
+  Req (Cred $ObserverUser) "/web/lists/getbytitle('DiscussionLikes')/items($($like.Data.Id))" 'Post' $null `
     @{ 'X-RequestDigest' = $ld; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' } | Out-Null
 }
 
@@ -150,29 +168,39 @@ Req $commAdmin "$POSTS/items($postId)" 'Post' $null `
 $survived = Req $commAdmin "$POSTS/items?`$filter=Id eq $postId"
 Check "department admin cannot delete" ($survived.Data.value.Count -eq 1) "the post was deleted by a non-Super-Admin"
 
-# spadmin is in "Content Admin", not in the site owners group, so it must be
-# refused too -- Super Admin means the owners group and nothing else.
+# spadmin holds admin-sounding group memberships but is not a site collection
+# administrator, so it must be refused too -- Super Admin means exactly that.
 $d6 = Digest $contentAdmin
 Req $contentAdmin "$POSTS/items($postId)" 'Post' $null `
   @{ 'X-RequestDigest' = $d6; 'X-HTTP-Method' = 'DELETE'; 'IF-MATCH' = '*' } | Out-Null
 $survived2 = Req $commAdmin "$POSTS/items?`$filter=Id eq $postId"
-Check "a non-owner admin account cannot delete either" ($survived2.Data.value.Count -eq 1) `
-  "the post was deleted by an account outside the site owners group"
+Check "a non-Super-Admin admin account cannot delete either" ($survived2.Data.value.Count -eq 1) `
+  "the post was deleted by an account that is not a site collection administrator"
 
 Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
 Connect-SPRest -SiteUrl $SiteUrl -Credential $Credential
-$owner = (Invoke-SPGet '/web?$expand=AssociatedOwnerGroup').AssociatedOwnerGroup
+
+# Structural guarantee: nobody holds Delete Items on the feed lists. Site
+# collection administrators are exempt from list permissions, so they are then
+# the only people who can delete -- the owners group included in "nobody".
+foreach ($listTitle in 'DiscussionPosts', 'DiscussionComments') {
+  $ras = (Invoke-SPGet "/web/lists/getbytitle('$listTitle')/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=500").value
+  $withDelete = @()
+  foreach ($ra in $ras) {
+    foreach ($b in @($ra.RoleDefinitionBindings)) {
+      if (([int64]$b.BasePermissions.Low -band 8) -ne 0) { $withDelete += "$($ra.Member.Title) ($($b.Name))" }
+    }
+  }
+  Check "no group or user holds Delete Items on $listTitle" ($withDelete.Count -eq 0) `
+    "still able to delete: $($withDelete -join ', ')"
+}
 
 if ($superAdmin) {
-  # The account must be a group member but NOT a site collection admin, or the
-  # delete would prove nothing about the permission model.
+  # Super Admin is defined as a site collection administrator.
   $enc = [uri]::EscapeDataString("i:0#.w|$Domain\$SuperAdminUser")
   $su = Invoke-SPGet "/web/siteusers/getbyloginname(@v)?@v='$enc'"
-  $suGroups = (Invoke-SPGet "/web/siteusers/getbyid($($su.Id))/groups?`$select=Title").value
-  Check "$SuperAdminUser is in '$($owner.Title)'" `
-    ((($suGroups | ForEach-Object { $_.Title }) -contains $owner.Title)) "groups: $(($suGroups | ForEach-Object { $_.Title }) -join ', ')"
-  Check "$SuperAdminUser is NOT a site collection admin" (-not $su.IsSiteAdmin) `
-    "IsSiteAdmin=$($su.IsSiteAdmin) — a delete by it would prove nothing"
+  Check "$SuperAdminUser is a Site Collection Administrator" ([bool]$su.IsSiteAdmin) `
+    "IsSiteAdmin=$($su.IsSiteAdmin) — add it under Site settings > Site collection administrators"
 
   $d7 = Digest $superAdmin
   $sd = Req $superAdmin "$POSTS/items($postId)" 'Post' $null `
@@ -193,14 +221,8 @@ if ($superAdmin) {
       "comment $cid was deleted by a non-Super-Admin"
   }
 } else {
-  # Fall back to asserting the grant, which is weaker than exercising it.
-  $ras = (Invoke-SPGet "$POSTS/roleassignments?`$expand=Member,RoleDefinitionBindings&`$top=200").value
-  $ownerRa = $ras | Where-Object { $_.Member.Id -eq $owner.Id } | Select-Object -First 1
-  $mask = if ($ownerRa) { [int64]($ownerRa.RoleDefinitionBindings | Select-Object -First 1).BasePermissions.Low } else { 0 }
-  Check "site owners group '$($owner.Title)' holds Delete Items on DiscussionPosts" `
-    (($mask -band 8) -ne 0) "permission mask Low=$mask"
-  Write-Host "  NOTE: Super Admin delete asserted from the permission grant, not exercised." -ForegroundColor Yellow
-  Write-Host "        Re-run with -SuperAdminPassword to test it for real." -ForegroundColor Yellow
+  Write-Host "  NOTE: no password for '$SuperAdminUser' (a site collection administrator), so" -ForegroundColor Yellow
+  Write-Host "        Super Admin delete was not exercised. Add it to test-accounts.local.json." -ForegroundColor Yellow
 }
 
 # Clean up whatever survived, as System Account.
@@ -210,5 +232,5 @@ if ($left.Count -gt 0) {
   catch { Write-Host "  could not clean up post $postId" -ForegroundColor Yellow }
 }
 
-Write-Host "`n$pass passed, $fail failed." -ForegroundColor $(if ($fail) { 'Red' } else { 'Green' })
+Write-Host "`n$pass passed, $fail failed$(if ($skipped) { ", $skipped skipped" })." -ForegroundColor $(if ($fail) { 'Red' } elseif ($skipped) { 'Yellow' } else { 'Green' })
 exit $(if ($fail) { 1 } else { 0 })

@@ -54,7 +54,8 @@ export interface IDepartment {
 }
 
 /**
- * What the signed-in user is allowed to do. Derived from SharePoint group
+ * What the signed-in user is allowed to do. Derived from the user's Site
+ * Collection Administrator flag (Super Admin) and "Dept Admins - …" group
  * membership, so it mirrors what the server will actually permit — the UI uses
  * it to decide what to render, never as the enforcement itself.
  */
