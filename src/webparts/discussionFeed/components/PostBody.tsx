@@ -1,7 +1,7 @@
 import * as React from 'react';
 import styles from './DiscussionFeed.module.scss';
 import { IPost, IMentionUser } from '../models';
-import { sanitize, splitBodyImages, stripHtml } from '../services/utils';
+import { sanitize, splitBodyImages, stripHtml, highlightPraiseNames } from '../services/utils';
 
 /**
  * A post's body: the text, then "with @Name, @Name" for the people picked in
@@ -12,6 +12,7 @@ import { sanitize, splitBodyImages, stripHtml } from '../services/utils';
 export const PostBody: React.StatelessComponent<{ post: IPost }> = (props: { post: IPost }): JSX.Element => {
   const p: IPost = props.post;
   const parts: { text: string; images: string } = splitBodyImages(sanitize(p.bodyHtml));
+  if (p.category === 'Praise') { parts.text = highlightPraiseNames(parts.text, styles.mention); }
 
   // Praise already names its people in the body ("Praise for @Name"); don't
   // list them a second time.

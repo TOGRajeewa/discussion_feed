@@ -68,6 +68,33 @@ export function splitBodyImages(html: string): { text: string; images: string } 
 }
 
 /**
+ * Highlight the names in a Praise post's lead line. The composer stores that
+ * line as plain text -- <em>Praise for @Name, @Name</em> -- so the names are
+ * wrapped here, at display time, which also covers posts saved earlier. Only
+ * text nodes are created, so nothing from the body is re-parsed as HTML.
+ */
+export function highlightPraiseNames(html: string, className: string): string {
+  const PREFIX: string = 'Praise for ';
+  if (!html || html.indexOf(PREFIX) < 0) { return html; }
+  const doc: Document = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const em: Element = Array.prototype.slice.call(doc.body.querySelectorAll('em'))
+    .filter((e: Element) => (e.textContent || '').indexOf(PREFIX + '@') === 0)[0];
+  if (!em) { return html; }
+
+  const names: string[] = em.textContent.substring(PREFIX.length).split(/,\s*(?=@)/);
+  while (em.firstChild) { em.removeChild(em.firstChild); }
+  em.appendChild(doc.createTextNode(PREFIX));
+  names.forEach((n: string, i: number) => {
+    if (i > 0) { em.appendChild(doc.createTextNode(', ')); }
+    const span: HTMLElement = doc.createElement('span');
+    span.className = className;
+    span.textContent = n.trim();
+    em.appendChild(span);
+  });
+  return doc.body.innerHTML;
+}
+
+/**
  * Unwrap an expanded MentionedUsers (UserMulti) column. With odata=verbose it
  * comes back as { results: [...] }; a post with nobody mentioned may give null.
  */

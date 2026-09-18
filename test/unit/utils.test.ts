@@ -97,3 +97,19 @@ describe('mentionsFrom', () => {
     expect(mentionsFrom({ __deferred: {} })).toEqual([]);
   });
 });
+
+import { highlightPraiseNames } from '../../src/webparts/discussionFeed/services/utils';
+
+describe('highlightPraiseNames', () => {
+  it('wraps each praised name in the mention style', () => {
+    const out = highlightPraiseNames('<div class="ExternalClassX"><p>🎉 <em>Praise for @SP user, @Test User2</em></p><p>well done</p></div>', 'm');
+    expect(out).toBe('<div class="ExternalClassX"><p>🎉 <em>Praise for <span class="m">@SP user</span>, <span class="m">@Test User2</span></em></p><p>well done</p></div>');
+  });
+  it('treats names as text, never markup', () => {
+    const out = highlightPraiseNames('<p><em>Praise for @a &lt;b&gt;x&lt;/b&gt;</em></p>', 'm');
+    expect(out).toBe('<p><em>Praise for <span class="m">@a &lt;b&gt;x&lt;/b&gt;</span></em></p>');
+  });
+  it('leaves bodies without a Praise line alone', () => {
+    expect(highlightPraiseNames('<p><em>Praise for</em> nobody</p>', 'm')).toBe('<p><em>Praise for</em> nobody</p>');
+  });
+});
