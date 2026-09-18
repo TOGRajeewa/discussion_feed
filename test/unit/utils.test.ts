@@ -53,3 +53,47 @@ describe('localPhotoUrl', () => {
     expect(localPhotoUrl('https://intranet', '')).toBe('');
   });
 });
+
+import { repairEmoji, splitBodyImages, mentionsFrom } from '../../src/webparts/discussionFeed/services/utils';
+
+const BASE = '/SiteAssets/SiteComponents/discussion-feed/emoji/';
+
+describe('repairEmoji', () => {
+  it('rebuilds a src stripped by SharePoint from the title', () => {
+    const stored = '<div class="ExternalClassX"><p>hi <img class="df-emoji" style="width&#58;1.3em;" title="Cat Face" alt="Cat Face" /></p></div>';
+    const out = repairEmoji(stored, BASE);
+    expect(out).toContain(`src="${BASE}cat_face_3d.png"`);
+    expect(out).toContain('title="Cat Face"');
+  });
+  it('turns an unknown emoji into its alt text instead of a broken image', () => {
+    const out = repairEmoji('<p><img class="df-emoji" title="No Such Thing" alt="No Such Thing" /></p>', BASE);
+    expect(out).not.toContain('<img');
+    expect(out).toContain('No Such Thing');
+  });
+  it('leaves emoji that still have a src, and other images, untouched', () => {
+    const html = `<p><img class="df-emoji" src="${BASE}cat_face_3d.png" title="Cat Face" alt="Cat Face" /><img src="/x.png" alt="" /></p>`;
+    expect(repairEmoji(html, BASE)).toBe(html);
+  });
+});
+
+describe('splitBodyImages', () => {
+  it('moves the image gallery out of the text', () => {
+    const r = splitBodyImages('<div class="ExternalClassX"><p>text</p><div class="df-images" data-count="1"><img src="/a.png" alt="a"></div></div>');
+    expect(r.text).toBe('<div class="ExternalClassX"><p>text</p></div>');
+    expect(r.images).toBe('<div class="df-images" data-count="1"><img src="/a.png" alt="a"></div>');
+  });
+  it('returns the body unchanged when there are no images', () => {
+    expect(splitBodyImages('<p>text</p>')).toEqual({ text: '<p>text</p>', images: '' });
+  });
+});
+
+describe('mentionsFrom', () => {
+  it('unwraps the odata=verbose results wrapper', () => {
+    expect(mentionsFrom({ results: [{ Title: 'Test User2', Name: 'i:0#.w|ad-him\\testuser2', EMail: 't2@x' }] }))
+      .toEqual([{ title: 'Test User2', loginName: 'i:0#.w|ad-him\\testuser2', email: 't2@x' }]);
+  });
+  it('treats a missing column as nobody mentioned', () => {
+    expect(mentionsFrom(null)).toEqual([]);
+    expect(mentionsFrom({ __deferred: {} })).toEqual([]);
+  });
+});

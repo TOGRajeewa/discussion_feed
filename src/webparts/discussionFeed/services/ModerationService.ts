@@ -1,5 +1,6 @@
 import { sp } from '@pnp/sp';
 import { IFeedConfig, IDepartment, IModeratorRole, IPost, ModerationStatus } from '../models';
+import { repairEmoji, mentionsFrom } from './utils';
 
 /**
  * Departments already carry a per-department SharePoint group named with this
@@ -107,9 +108,10 @@ export class ModerationService {
       .select(
         'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
         'OData__ModerationStatus', 'OData__ModerationComments',
-        'Author/Title', 'Author/EMail'
+        'Author/Title', 'Author/EMail',
+        'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
       )
-      .expand('Author')
+      .expand('Author', 'MentionedUsers')
       .filter(clauses.join(' and '))
       .orderBy('Created', true)     // oldest first: longest-waiting gets reviewed first
       .top(100)
@@ -122,7 +124,7 @@ export class ModerationService {
     return {
       id: it.Id,
       title: it.Title,
-      bodyHtml: it.Body || '',
+      bodyHtml: repairEmoji(it.Body || '', this.cfg.emojiBaseUrl),
       category: (it.Category || 'Discussion'),
       authorTitle: it.Author ? it.Author.Title : 'Unknown',
       authorDept: it.Department || '',
@@ -133,7 +135,8 @@ export class ModerationService {
       likeUserIds: [],
       commentCount: 0,
       status: it.OData__ModerationStatus,
-      moderationNote: it.OData__ModerationComments || ''
+      moderationNote: it.OData__ModerationComments || '',
+      mentions: mentionsFrom(it.MentionedUsers)
     };
   }
 

@@ -5,8 +5,8 @@ import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
 import { Icon } from 'office-ui-fabric-react/lib/Icon';
 import styles from './DiscussionFeed.module.scss';
 import { CardHeader } from './CardHeader';
+import { PostBody } from './PostBody';
 import { IPost, IDepartment, IModeratorRole } from '../models';
-import { sanitize } from '../services/utils';
 
 export interface IModerationQueueProps {
   role: IModeratorRole;
@@ -111,7 +111,7 @@ export class ModerationQueue extends React.Component<IModerationQueueProps, IMod
           category={p.category}
         />
 
-        <div className={styles.body} dangerouslySetInnerHTML={{ __html: sanitize(p.bodyHtml) }} />
+        <PostBody post={p} />
 
         <div className={styles.modActions}>
           <PrimaryButton

@@ -2,7 +2,7 @@ import { sp } from '@pnp/sp';
 import {
   IFeedConfig, IPost, IComment, IPostDraft, ICurrentUser, IPagedPosts, ModerationStatus
 } from '../models';
-import { stripHtml, localPhotoUrl } from './utils';
+import { stripHtml, localPhotoUrl, repairEmoji, mentionsFrom } from './utils';
 import { notifyMentions } from './MailService';
 
 /**
@@ -49,9 +49,10 @@ export class FeedService {
     const page: any = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
       .select(
         'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
-        'Author/Title', 'Author/EMail'
+        'Author/Title', 'Author/EMail',
+        'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
       )
-      .expand('Author')
+      .expand('Author', 'MentionedUsers')
       // Belt and braces: SharePoint already trims unapproved items out of the
       // response for anyone without Approve Items, but an approver browsing the
       // ordinary feed would otherwise see pending posts mixed in with live ones.
@@ -75,9 +76,10 @@ export class FeedService {
       it = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(id)
         .select(
           'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
-          'OData__ModerationStatus', 'Author/Title', 'Author/EMail'
+          'OData__ModerationStatus', 'Author/Title', 'Author/EMail',
+          'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
         )
-        .expand('Author')
+        .expand('Author', 'MentionedUsers')
         .get();
     } catch (e) {
       return null;   // 404 (deleted) or access denied (not approved, not an approver)
@@ -153,7 +155,7 @@ export class FeedService {
     return {
       id: it.Id,
       title: it.Title,
-      bodyHtml: it.Body || '',
+      bodyHtml: repairEmoji(it.Body || '', this.cfg.emojiBaseUrl),
       category: (it.Category || 'Discussion'),
       authorTitle: it.Author ? it.Author.Title : 'Unknown',
       authorDept: it.Department || '',
@@ -164,7 +166,8 @@ export class FeedService {
       likeUserIds: [],        // filled in by attachEngagement
       commentCount: 0,
       status: ModerationStatus.Approved,
-      moderationNote: ''
+      moderationNote: '',
+      mentions: mentionsFrom(it.MentionedUsers)
     };
   }
 

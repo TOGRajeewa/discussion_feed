@@ -98,6 +98,7 @@ $pageBg: #ffffff;
   table { border-collapse: collapse; width: 100%; }
   td, th { border: 1px solid #e1e1e1; padding: 6px 8px; }
   .mention { color: $burgundy; font-weight: 600; }
+  .mentionLine { margin-top: 6px; font-size: 13.5px; }
 }
 
 /* ---- category badge (subtle, top-right) ---- */

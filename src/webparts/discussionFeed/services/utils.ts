@@ -1,4 +1,6 @@
 import * as DOMPurify from 'dompurify';
+import { EMOJI_SET, IEmoji } from '../components/emojiSet';
+import { IMentionUser } from '../models';
 
 /** Strip tags for the mandatory list Title column (cannot hold HTML). */
 export function stripHtml(html: string): string {
@@ -13,6 +15,67 @@ export function sanitize(html: string): string {
     ADD_TAGS: ['table', 'thead', 'tbody', 'tr', 'td', 'th'],
     ADD_ATTR: ['data-mention-login', 'colspan', 'rowspan']
   });
+}
+
+let emojiByLabel: { [label: string]: IEmoji } = null;
+
+/**
+ * Put back emoji images that SharePoint stripped on save. Posts written before
+ * the editor stopped converting URLs have <img class="df-emoji"> tags whose
+ * relative src was dropped; the title still names the emoji, so the file is
+ * looked up in the same table the picker uses. An unknown title becomes its
+ * alt text rather than a broken image. Parsed with DOMParser, which neither
+ * runs scripts nor fetches images; the result is still sanitised at render.
+ */
+export function repairEmoji(html: string, emojiBaseUrl: string): string {
+  if (!html || html.indexOf('df-emoji') < 0) { return html; }
+  if (!emojiByLabel) {
+    emojiByLabel = {};
+    EMOJI_SET.forEach((e: IEmoji) => { emojiByLabel[e.label.toLowerCase()] = e; });
+  }
+
+  const doc: Document = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const imgs: HTMLImageElement[] = Array.prototype.slice.call(doc.body.querySelectorAll('img.df-emoji'));
+  let changed: boolean = false;
+  imgs.forEach((img: HTMLImageElement) => {
+    if ((img.getAttribute('src') || '').trim()) { return; }
+    changed = true;
+    const label: string = img.getAttribute('title') || img.getAttribute('alt') || '';
+    const e: IEmoji = emojiByLabel[label.trim().toLowerCase()];
+    if (e && emojiBaseUrl) {
+      img.setAttribute('src', emojiBaseUrl + e.file);
+    } else {
+      img.parentNode.replaceChild(doc.createTextNode(img.getAttribute('alt') || label), img);
+    }
+  });
+  return changed ? doc.body.innerHTML : html;
+}
+
+/**
+ * Separate the attached-image gallery (<div class="df-images">, appended by the
+ * composer) from the rest of a sanitised body, so the card can place the
+ * mention line between the text and the pictures.
+ */
+export function splitBodyImages(html: string): { text: string; images: string } {
+  if (!html || html.indexOf('df-images') < 0) { return { text: html || '', images: '' }; }
+  const doc: Document = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const galleries: Element[] = Array.prototype.slice.call(doc.body.querySelectorAll('div.df-images'));
+  const images: string = galleries.map((g: Element) => {
+    g.parentNode.removeChild(g);
+    return g.outerHTML;
+  }).join('');
+  return { text: doc.body.innerHTML, images };
+}
+
+/**
+ * Unwrap an expanded MentionedUsers (UserMulti) column. With odata=verbose it
+ * comes back as { results: [...] }; a post with nobody mentioned may give null.
+ */
+export function mentionsFrom(v: any): IMentionUser[] {
+  const rows: any[] = !v ? [] : Array.isArray(v) ? v : (Array.isArray(v.results) ? v.results : []);
+  return rows
+    .filter((u: any) => u && u.Title)
+    .map((u: any) => ({ title: u.Title, loginName: u.Name || '', email: u.EMail || '' }));
 }
 
 /** Local profile photo — userphoto.aspx, NOT Graph. */

@@ -50,6 +50,13 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
       table_default_attributes: { border: '1' },
       table_toolbar: '',
       paste_data_images: false,
+      // Leave URLs exactly as inserted. By default TinyMCE rewrites
+      // "/SiteAssets/…" to a page-relative "../SiteAssets/…", and SharePoint's
+      // rich-text filter then drops relative src/href values on save -- which
+      // is how emoji lost their images and relative links their targets.
+      convert_urls: false,
+      relative_urls: false,
+      remove_script_host: false,
       images_upload_handler: this.onImageUpload,
       content_style:
         'body{font-family:Segoe UI,Arial,sans-serif;font-size:14.5px;color:#242424;line-height:1.5;margin:0;padding:10px 12px;position:relative;} ' +

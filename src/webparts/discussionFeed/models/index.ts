@@ -45,6 +45,8 @@ export interface IPost {
   status: ModerationStatus;
   /** _ModerationComments — the reason captured when a post is rejected. */
   moderationNote: string;
+  /** People picked in "@mention people", read back from the MentionedUsers column. */
+  mentions: IMentionUser[];
 }
 
 /** Outcome of the Share action, shown inside the post that was shared. */

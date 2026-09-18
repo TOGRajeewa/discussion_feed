@@ -3,8 +3,8 @@ import styles from './DiscussionFeed.module.scss';
 import { CardHeader } from './CardHeader';
 import { EngagementBar } from './EngagementBar';
 import { CommentThread } from './CommentThread';
+import { PostBody } from './PostBody';
 import { IPost, IComment, IShareResult } from '../models';
-import { sanitize } from '../services/utils';
 
 export interface IThreadCardProps {
   post: IPost;
@@ -75,10 +75,7 @@ export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardSta
           category={p.category}
         />
 
-        <div
-          className={styles.body}
-          dangerouslySetInnerHTML={{ __html: sanitize(p.bodyHtml) }}
-        />
+        <PostBody post={p} />
 
         <EngagementBar
           likeCount={p.likeUserIds.length}
