@@ -4,11 +4,13 @@ import { IconButton } from 'office-ui-fabric-react/lib/Button';
 import { IContextualMenuProps } from 'office-ui-fabric-react/lib/ContextualMenu';
 import styles from './DiscussionFeed.module.scss';
 import { EmojiPicker } from './EmojiPicker';
-import { CATEGORY_DEFS, categoryDef } from './categories';
+import { CATEGORY_DEFS, categoryDef, ICategoryDef } from './categories';
 import { PostCategory } from '../models';
 
 export interface IComposerToolbarProps {
   category: PostCategory;
+  /** Post types this feed offers; Social Corner's when omitted. */
+  categories?: ICategoryDef[];
   onCategoryChange: (c: PostCategory) => void;
   exec: (command: string, value?: any) => void;     // drive the editor
   insert: (html: string) => void;                    // insert HTML/emoji
@@ -37,9 +39,11 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
     if (url && url !== 'https://') { this.props.exec('mceInsertLink', url); }
   }
 
+  private get defs(): ICategoryDef[] { return this.props.categories || CATEGORY_DEFS; }
+
   private get categoryMenu(): IContextualMenuProps {
     return {
-      items: CATEGORY_DEFS.map(c => ({
+      items: this.defs.map(c => ({
         key: c.key,
         name: c.label,        // Fluent v5 uses `name` for the label (not `text`)
         text: c.label,        // harmless on v5, future-proof for v6+
@@ -50,7 +54,7 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
   }
 
   public render(): JSX.Element {
-    const def = categoryDef(this.props.category);
+    const def = categoryDef(this.props.category, this.defs);
     const fmt: { cmd?: string; icon: string; title: string; action?: () => void }[] = [
       { cmd: 'Bold', icon: 'Bold', title: 'Bold' },
       { cmd: 'Italic', icon: 'Italic', title: 'Italic' },

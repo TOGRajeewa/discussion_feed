@@ -548,3 +548,46 @@ $pageBg: #ffffff;
 :global(:root[data-theme='dark']) .sharedClose { background: transparent; color: #e6edf3; border-color: #2d333b; }
 :global(:root[data-theme='dark']) .sharedClose:hover { background: rgba(255, 255, 255, 0.06); }
 :global(:root[data-theme='dark']) .sharedNote { background: #16202e; border-color: #2d333b; color: #e6edf3; }
+
+/* ---- Social Corner | Market Place switch ---- */
+/* Class names avoid the fragments the portal styles by substring
+   (card_, feed_, body_, typeTab_, engItem_ ...). Plain buttons, not Fabric's:
+   the portal hides .ms-Button--default inside the home page container. */
+.hubTabs {
+  display: flex; gap: 4px; padding: 4px; margin: 0 0 18px;
+  background: #f3f2f1; border: 1px solid #e1dfdd; border-radius: 12px;
+}
+.hubTab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
+  height: 42px; padding: 0 12px; border: none; border-radius: 9px; background: transparent;
+  font: inherit; font-size: 15px; font-weight: 600; color: $metaGray; cursor: pointer;
+  i { font-size: 16px; }
+}
+.hubTab:hover { color: $nameBlack; background: rgba(0, 0, 0, 0.04); }
+.hubTabActive,
+.hubTabActive:hover { background: $burgundy; color: #fff; box-shadow: 0 2px 8px rgba(155, 34, 66, 0.3); }
+
+/* ---- Market Place: All posts / My posts ---- */
+.mineFilter { display: flex; gap: 8px; margin: 0 2px 16px; }
+.mineChip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 15px; border-radius: 17px;
+  border: 1px solid #e1dfdd; background: transparent; color: $metaGray;
+  font: inherit; font-size: 13.5px; cursor: pointer;
+  i { font-size: 14px; }
+}
+.mineChip:hover { color: $nameBlack; }
+.mineChipActive,
+.mineChipActive:hover { background: rgba(155, 34, 66, 0.08); border-color: $burgundy; color: $burgundy; font-weight: 600; }
+
+.emptyNote { text-align: center; color: $metaGray; font-size: 14px; padding: 28px 12px; }
+
+:global(:root[data-theme='dark']) .hubTabs { background: #121b28; border-color: #2d333b; }
+:global(:root[data-theme='dark']) .hubTab { color: #9ba4b0; }
+:global(:root[data-theme='dark']) .hubTab:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.05); }
+:global(:root[data-theme='dark']) .hubTabActive,
+:global(:root[data-theme='dark']) .hubTabActive:hover { background: $burgundy; color: #fff; }
+:global(:root[data-theme='dark']) .mineChip { border-color: #2d333b; color: #9ba4b0; }
+:global(:root[data-theme='dark']) .mineChip:hover { color: #e6edf3; }
+:global(:root[data-theme='dark']) .mineChipActive,
+:global(:root[data-theme='dark']) .mineChipActive:hover { background: rgba(196, 71, 88, 0.16); border-color: #c44758; color: #f6c9d2; }
+:global(:root[data-theme='dark']) .emptyNote { color: #9ba4b0; }

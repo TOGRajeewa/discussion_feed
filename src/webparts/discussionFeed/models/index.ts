@@ -36,6 +36,8 @@ export interface IPost {
   authorDept: string;
   authorDeptId: number;
   authorEmail: string;
+  /** Author's site user id; in the Market Place it decides who sees Delete. */
+  authorId: number;
   authorPicUrl: string;
   created: string;          // ISO
   likeUserIds: number[];
@@ -80,6 +82,7 @@ export interface IComment {
   bodyHtml: string;
   authorTitle: string;
   authorEmail: string;
+  authorId: number;
   authorPicUrl: string;
   created: string;
 }

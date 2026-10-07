@@ -35,13 +35,7 @@ export class ModerationService {
   public async getRole(): Promise<IModeratorRole> {
     if (this.roleCache) { return this.roleCache; }
 
-    let isSuperAdmin: boolean = false;
-    try {
-      const me: any = await sp.web.currentUser.select('IsSiteAdmin').get();
-      isSuperAdmin = !!(me && me.IsSiteAdmin);
-    } catch (e) {
-      isSuperAdmin = false;
-    }
+    const isSuperAdmin: boolean = await this.isSiteAdmin();
 
     let groupTitles: string[] = [];
     try {
@@ -73,6 +67,20 @@ export class ModerationService {
       canModerate: isSuperAdmin || departments.length > 0
     };
     return this.roleCache;
+  }
+
+  /**
+   * Is the signed-in user a Site Collection Administrator (a Super Admin)?
+   * All the Market Place needs: it has no approvers, only authors and Super
+   * Admins who may delete.
+   */
+  public async isSiteAdmin(): Promise<boolean> {
+    try {
+      const me: any = await sp.web.currentUser.select('IsSiteAdmin').get();
+      return !!(me && me.IsSiteAdmin);
+    } catch (e) {
+      return false;
+    }
   }
 
   public async getAllDepartments(): Promise<IDepartment[]> {
@@ -107,7 +115,7 @@ export class ModerationService {
     const items: any[] = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
       .select(
         'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
-        'OData__ModerationStatus', 'OData__ModerationComments',
+        'OData__ModerationStatus', 'OData__ModerationComments', 'AuthorId',
         'Author/Title', 'Author/EMail',
         'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
       )
@@ -130,6 +138,7 @@ export class ModerationService {
       authorDept: it.Department || '',
       authorDeptId: it.DepartmentId || 0,
       authorEmail: it.Author ? it.Author.EMail : '',
+      authorId: it.AuthorId || 0,
       authorPicUrl: '',
       created: it.Created,
       likeUserIds: [],

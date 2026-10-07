@@ -2,6 +2,7 @@ import * as React from 'react';
 import styles from './DiscussionFeed.module.scss';
 import { Avatar } from './Avatar';
 import { CategoryBadge } from './CategoryBadge';
+import { ICategoryDef } from './categories';
 import { timeAgo } from '../services/utils';
 import { PostCategory } from '../models';
 
@@ -11,6 +12,8 @@ export interface ICardHeaderProps {
   picUrl: string;
   created: string;
   category: PostCategory;
+  /** The feed's post types, for the badge label. */
+  categories?: ICategoryDef[];
 }
 
 export function CardHeader(props: ICardHeaderProps): JSX.Element {
@@ -22,7 +25,7 @@ export function CardHeader(props: ICardHeaderProps): JSX.Element {
         <span className={styles.authorName}>{props.name}</span>
         <span className={styles.metaLine}>{meta}</span>
       </div>
-      <CategoryBadge category={props.category} />
+      <CategoryBadge category={props.category} categories={props.categories} />
     </div>
   );
 }

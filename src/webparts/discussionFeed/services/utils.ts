@@ -105,6 +105,12 @@ export function mentionsFrom(v: any): IMentionUser[] {
     .map((u: any) => ({ title: u.Title, loginName: u.Name || '', email: u.EMail || '' }));
 }
 
+/** The id in a share link, e.g. 12 for "#post=12" and key "post"; null when absent. */
+export function idFromHash(key: string, hash: string = window.location.hash): number {
+  const m: RegExpMatchArray = (hash || '').match(new RegExp('(?:^#|&)' + key + '=(\\d+)'));
+  return m ? parseInt(m[1], 10) : null;
+}
+
 /** Local profile photo — userphoto.aspx, NOT Graph. */
 export function localPhotoUrl(webUrl: string, email: string, size: 'S' | 'M' | 'L' = 'M'): string {
   if (!email) { return ''; }

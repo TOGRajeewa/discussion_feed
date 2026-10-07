@@ -8,10 +8,11 @@ import { PostSubmitBox } from './PostSubmitBox';
 import { FeedList } from './FeedList';
 import { ThreadCard } from './ThreadCard';
 import { ModerationQueue } from './ModerationQueue';
+import { IFeedKind, SOCIAL_KIND } from './feedKinds';
 import { FeedService } from '../services/FeedService';
 import { ModerationService } from '../services/ModerationService';
 import { DepartmentService } from '../services/DepartmentService';
-import { copyText } from '../services/utils';
+import { copyText, idFromHash } from '../services/utils';
 import {
   IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole, IShareResult
 } from '../models';
@@ -36,17 +37,18 @@ export interface IDiscussionFeedState {
   pending: IPost[];
   pendingLoading: boolean;
   queueDeptId: number;
-  // --- shared-post link (#post=<id>) ---
+  // --- shared-post link (#post=<id>, #market=<id>) ---
   focusPostId: number;
   /** The shared post when it is not already in `posts` (e.g. older than page one). */
   focusPost: IPost;
   focusStatus: 'loading' | 'ready' | 'missing';
-}
-
-/** The post id in a "#post=<id>" link, or null. */
-function postIdFromHash(): number {
-  const m: RegExpMatchArray = (window.location.hash || '').match(/(?:^#|&)post=(\d+)/);
-  return m ? parseInt(m[1], 10) : null;
+  // --- Market Place ---
+  /** "My posts": only the current user's posts. */
+  mineOnly: boolean;
+  /** The list below the composer is being refetched (filter changed). */
+  reloading: boolean;
+  /** The feed's list does not exist on this site (not provisioned yet). */
+  unavailable: boolean;
 }
 
 const NO_ROLE: IModeratorRole = { isSuperAdmin: false, departments: [], canModerate: false };
@@ -56,13 +58,15 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   private mod: ModerationService;
   private depts: DepartmentService;
   private pager: IPagedPosts = null;   // current tail of the server-side page chain
+  private feedSeq: number = 0;          // drops page-one responses a newer request superseded
 
   constructor(props: IDiscussionFeedProps) {
     super(props);
-    this.svc = new FeedService(props.config);
+    const kind: IFeedKind = props.kind || SOCIAL_KIND;
+    this.svc = new FeedService(props.config, kind.moderated);
     this.mod = new ModerationService(props.config);
     this.depts = new DepartmentService(props.config);
-    const sharedId: number = props.mode === 'moderation' ? null : (postIdFromHash() || null);
+    const sharedId: number = props.mode === 'moderation' ? null : (idFromHash(kind.hashKey) || null);
     this.state = {
       loading: true,
       posts: [],
@@ -86,16 +90,21 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       // full feed never flashes up before the post loads.
       focusPostId: sharedId,
       focusPost: null,
-      focusStatus: sharedId ? 'loading' : null
+      focusStatus: sharedId ? 'loading' : null,
+      mineOnly: false,
+      reloading: false,
+      unavailable: false
     };
   }
+
+  private get kind(): IFeedKind { return this.props.kind || SOCIAL_KIND; }
 
   public componentWillUnmount(): void {
     window.removeEventListener('hashchange', this.onHashChange);
   }
 
   private onHashChange = (): void => {
-    const id: number = postIdFromHash();
+    const id: number = idFromHash(this.kind.hashKey);
     if (id && id !== this.state.focusPostId) { this.openSharedPost(id); }
   }
 
@@ -122,7 +131,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   private closeSharedPost = (): void => {
     this.setState({ focusPostId: null, focusPost: null, focusStatus: null });
     // Drop the hash so a reload shows the normal feed.
-    if (postIdFromHash() && window.history && window.history.replaceState) {
+    if (idFromHash(this.kind.hashKey) && window.history && window.history.replaceState) {
       window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
     }
   }
@@ -152,15 +161,34 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       this.pager = page;
       this.setState({ posts: page.posts, hasNext: page.hasNext, loading: false });
     } catch (e) {
+      // A list that does not exist yet means the feed was deployed before its
+      // lists were provisioned (Provision-Marketplace.ps1). Say so plainly
+      // rather than offering a composer whose posts would fail to save.
+      const missing: boolean = !this.kind.moderated &&
+        (e.status === 404 || /does not exist/i.test(String(e.message || e)));
+      if (missing) {
+        this.setState({ unavailable: true, loading: false });
+        return;
+      }
       // Keep currentUser so the composer still works; just surface the feed error.
       this.setState({ error: `Failed to load posts: ${e.message || e}`, loading: false });
     }
 
-    // A shared link (#post=<id>): open that post now, and again whenever the
-    // hash changes without a reload (a second link opened in the same tab).
+    // A shared link (#post=<id>, #market=<id>): open that post now, and again
+    // whenever the hash changes without a reload (a second link in the same tab).
     window.addEventListener('hashchange', this.onHashChange);
-    const sharedId: number = postIdFromHash();
+    const sharedId: number = idFromHash(this.kind.hashKey);
     if (sharedId && this.props.mode !== 'moderation') { this.openSharedPost(sharedId); }
+
+    // The Market Place has no approvers: the only role that matters there is
+    // Super Admin, who may delete anyone's post.
+    if (!this.kind.moderated) {
+      const isSuperAdmin: boolean = await this.mod.isSiteAdmin();
+      this.setState({ role: { ...NO_ROLE, isSuperAdmin } });
+      // Only shown on the card, so a failed lookup just leaves it blank.
+      try { this.setState({ myDepartment: await this.depts.resolveForCurrentUser() }); } catch (e) { /* optional */ }
+      return;
+    }
 
     // Moderation context loads last and never blocks the feed: an ordinary user
     // gets no role and no queue, which is the common case.
@@ -212,16 +240,53 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   }
 
   /**
-   * The post lands as Pending, so there is deliberately no feed refresh here —
-   * refetching would return the same list and read as "nothing happened". The
-   * composer shows a confirmation instead. A moderator gets their queue count
-   * bumped, since their own submission may be theirs to review.
+   * In Social Corner the post lands as Pending, so there is deliberately no
+   * feed refresh here — refetching would return the same list and read as
+   * "nothing happened". The composer shows a confirmation instead. A moderator
+   * gets their queue count bumped, since their own submission may be theirs to
+   * review.
+   *
+   * A Market Place post is live at once, so it goes straight to the top of
+   * the feed -- under "My posts" too, since it is the author's own.
    */
   private onSubmit = async (draft: IPostDraft): Promise<void> => {
-    await this.svc.createPost(draft, this.props.pageUrl);
+    const kind: IFeedKind = this.kind;
+    const newId: number = await this.svc.createPost(
+      draft, (id: number) => `${this.props.pageUrl}#${kind.hashKey}=${id}`, kind.mail);
+
+    if (!kind.moderated) {
+      try {
+        const post: IPost = await this.svc.getPostById(newId);
+        if (post) { this.setState({ posts: [post].concat(this.state.posts) }); }
+        else { await this.reloadFeed(); }
+      } catch (e) {
+        // Saved regardless; the next load shows it.
+      }
+      return;
+    }
     if (this.state.role.canModerate) {
       await this.refreshQueue(this.state.role, this.state.queueDeptId);
     }
+  }
+
+  /** Delete is offered to Super Admins everywhere, and to authors in the Market Place. */
+  private canDeletePost = (p: IPost): boolean =>
+    this.state.role.isSuperAdmin || (this.kind.authorsDelete && p.authorId === this.state.currentUser.id)
+
+  private canDeleteComment = (c: IComment): boolean =>
+    this.state.role.isSuperAdmin || (this.kind.authorsDelete && c.authorId === this.state.currentUser.id)
+
+  /** All posts / My posts. Refetches page one, since paging runs server-side. */
+  private setMineOnly = async (mineOnly: boolean): Promise<void> => {
+    if (mineOnly === this.state.mineOnly) { return; }
+    this.setState({ mineOnly, reloading: true });
+    try {
+      await this.reloadFeed(mineOnly);
+    } catch (e) {
+      this.setState({ error: `Could not load posts: ${e.message || e}` });
+    }
+    // A quicker second click owns the spinner now; leave it to clear it.
+    if (this.state.mineOnly === mineOnly) { this.setState({ reloading: false }); }
   }
 
   private onApprove = async (postId: number): Promise<void> => {
@@ -276,8 +341,10 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     await this.refreshQueue(this.state.role, deptId);
   }
 
-  private async reloadFeed(): Promise<void> {
-    const page: IPagedPosts = await this.svc.getPostsFirstPage();
+  private async reloadFeed(mineOnly: boolean = this.state.mineOnly): Promise<void> {
+    const seq: number = ++this.feedSeq;
+    const page: IPagedPosts = await this.svc.getPostsFirstPage(mineOnly ? this.state.currentUser.id : undefined);
+    if (seq !== this.feedSeq) { return; }   // the filter changed again meanwhile
     this.pager = page;
     this.setState({ posts: page.posts, hasNext: page.hasNext });
   }
@@ -330,13 +397,16 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
    * top of the widget, which may be scrolled far out of view.
    */
   private onShare = (postId: number): Promise<IShareResult> => {
-    const url: string = `${this.props.pageUrl}#post=${postId}`;
+    const url: string = `${this.props.pageUrl}#${this.kind.hashKey}=${postId}`;
     return copyText(url).then((copied: boolean) => ({ copied, url }));
   }
 
   public render(): JSX.Element {
+    // The Social Corner / Market Place switch, when this feed sits under one.
+    const topBar: JSX.Element = this.props.topBar || null;
+
     if (this.state.loading) {
-      return <div className={styles.feed}><Spinner size={SpinnerSize.large} label="Loading feed…" /></div>;
+      return <div className={styles.feed}>{topBar}<Spinner size={SpinnerSize.large} label="Loading feed…" /></div>;
     }
 
     // If the current user couldn't be resolved (e.g. a load error), show the error
@@ -345,9 +415,21 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       return (
         <div className={styles.feed}>
           <h1 className={styles.pageHeading}>Social Feed</h1>
+          {topBar}
           <MessageBar messageBarType={MessageBarType.error}>
             {this.state.error || 'Could not load the feed. Please refresh.'}
           </MessageBar>
+        </div>
+      );
+    }
+
+    if (this.state.unavailable) {
+      return (
+        <div className={styles.feed}>
+          {topBar}
+          <div className={styles.emptyNote}>
+            The {this.kind.label} isn't set up on this site yet. Please try again later.
+          </div>
         </div>
       );
     }
@@ -370,6 +452,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       return (
         <div className={styles.feed}>
           <h1 className={styles.pageHeading}>Social Feed</h1>
+          {topBar}
           {this.state.error &&
             <MessageBar
               messageBarType={MessageBarType.info}
@@ -383,6 +466,8 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     return (
       <div className={styles.feed}>
         <h1 className={styles.pageHeading}>{queueOnly ? 'Pending review' : 'Social Feed'}</h1>
+
+        {!queueOnly && topBar}
 
         {role.canModerate && !queueOnly && this.renderTabs()}
 
@@ -411,9 +496,16 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 department={this.state.myDepartment}
                 departmentOptions={this.state.allDepartments}
                 onSubmit={this.onSubmit}
+                categories={this.kind.categories}
+                prompt={this.kind.prompt}
+                reviewed={this.kind.moderated}
               />
 
-              <FeedList
+              {this.kind.mineFilter && this.renderMineFilter()}
+
+              {this.state.reloading
+                ? <div style={{ textAlign: 'center', padding: 24 }}><Spinner size={SpinnerSize.medium} /></div>
+                : <FeedList
                 posts={this.state.posts}
                 currentUserId={this.state.currentUser.id}
                 expandedPostId={this.state.expandedPostId}
@@ -421,7 +513,15 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 commentsLoading={this.state.commentsLoading}
                 hasNext={this.state.hasNext}
                 loadingMore={this.state.loadingMore}
-                canDelete={role.isSuperAdmin}
+                canDeletePost={this.canDeletePost}
+                canDeleteComment={this.canDeleteComment}
+                categories={this.kind.categories}
+                idPrefix={this.kind.cardIdPrefix}
+                emptyText={this.kind.mineFilter
+                  ? (this.state.mineOnly
+                      ? `You haven't posted anything in the ${this.kind.label} yet.`
+                      : `Nothing in the ${this.kind.label} yet. Be the first to post.`)
+                  : undefined}
                 onLoadMore={this.onLoadMore}
                 onLike={this.onLike}
                 onToggleComments={this.onToggleComments}
@@ -429,8 +529,29 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
                 onShare={this.onShare}
                 onDeletePost={this.onDeletePost}
                 onDeleteComment={this.onDeleteComment}
-              />
+              />}
             </div>}
+      </div>
+    );
+  }
+
+  /** All posts / My posts (Market Place). Plain buttons: the portal hides Fabric's DefaultButton on the home page. */
+  private renderMineFilter(): JSX.Element {
+    const chip = (mine: boolean, label: string, icon?: string): JSX.Element => (
+      <button
+        type="button"
+        className={`${styles.mineChip} ${this.state.mineOnly === mine ? styles.mineChipActive : ''}`}
+        aria-pressed={this.state.mineOnly === mine}
+        onClick={() => this.setMineOnly(mine)}
+      >
+        {icon && <Icon iconName={icon} />}
+        <span>{label}</span>
+      </button>
+    );
+    return (
+      <div className={styles.mineFilter} role="group" aria-label="Show">
+        {chip(false, 'All posts')}
+        {chip(true, 'My posts', 'Contact')}
       </div>
     );
   }
@@ -449,7 +570,9 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
         <div className={styles.sharedNote} role="status">
           <Icon iconName="Info" />
           <span className={styles.sharedNoteText}>
-            This post isn't available. It may have been removed, or it may still be waiting for approval.
+            {this.kind.moderated
+              ? "This post isn't available. It may have been removed, or it may still be waiting for approval."
+              : "This post isn't available. It may have been removed."}
           </span>
           <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Show all posts</button>
         </div>
@@ -472,7 +595,10 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
           expanded={s.expandedPostId === post.id}
           commentsLoading={!!s.commentsLoading[post.id]}
           comments={s.commentsByPost[post.id] || []}
-          canDelete={s.role.isSuperAdmin}
+          canDelete={this.canDeletePost(post)}
+          canDeleteComment={this.canDeleteComment}
+          categories={this.kind.categories}
+          idPrefix={this.kind.cardIdPrefix}
           onLike={this.onLike}
           onToggleComments={this.onToggleComments}
           onAddComment={this.onAddComment}

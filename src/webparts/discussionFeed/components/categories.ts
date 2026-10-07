@@ -47,6 +47,25 @@ export const CATEGORY_DEFS: ICategoryDef[] = [
   }
 ];
 
-export function categoryDef(key: PostCategory): ICategoryDef {
-  return CATEGORY_DEFS.filter((c: ICategoryDef) => c.key === key)[0] || CATEGORY_DEFS[0];
+/**
+ * Market Place post types: no Praise, and "Discussion" is labelled "Post" --
+ * it is what staff use to advertise. Only the label changes; the stored
+ * Category value is still "Discussion".
+ */
+export const MARKET_CATEGORY_DEFS: ICategoryDef[] = [
+  {
+    ...CATEGORY_DEFS[0],
+    label: 'Post',
+    bodyPlaceholder: 'What are you selling or offering? Add the price and how to reach you.',
+    submitLabel: 'Post'
+  },
+  {
+    ...CATEGORY_DEFS[1],
+    titlePlaceholder: 'What are you looking for? (required)',
+    submitLabel: 'Post'
+  }
+];
+
+export function categoryDef(key: PostCategory, defs: ICategoryDef[] = CATEGORY_DEFS): ICategoryDef {
+  return defs.filter((c: ICategoryDef) => c.key === key)[0] || defs[0];
 }

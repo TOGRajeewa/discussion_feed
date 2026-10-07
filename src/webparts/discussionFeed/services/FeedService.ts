@@ -3,7 +3,7 @@ import {
   IFeedConfig, IPost, IComment, IPostDraft, ICurrentUser, IPagedPosts, ModerationStatus
 } from '../models';
 import { stripHtml, localPhotoUrl, repairEmoji, mentionsFrom } from './utils';
-import { notifyMentions } from './MailService';
+import { notifyMentions, IMentionMail } from './MailService';
 
 /**
  * Build an OData filter matching any of `ids` on `field`. SharePoint on-prem
@@ -26,7 +26,8 @@ function toArray(v: any): any[] {
 }
 
 export class FeedService {
-  constructor(private cfg: IFeedConfig) { }
+  /** `moderated` is false for the Market Place, whose list has no content approval. */
+  constructor(private cfg: IFeedConfig, private moderated: boolean = true) { }
 
   /** Current user for the submit-box Persona. */
   public async getCurrentUser(): Promise<ICurrentUser> {
@@ -44,19 +45,28 @@ export class FeedService {
    * Load the first page of the feed (newest first) with likes + author in one
    * round-trip. Returns a pager so the UI can "Load more" via server-side
    * skip-tokens (getPaged) — correct for large lists where $skip is unreliable.
+   *
+   * `authorId` narrows it to one person's posts ("My posts" in the Market
+   * Place, whose list is indexed on Created By for exactly this filter).
    */
-  public async getPostsFirstPage(): Promise<IPagedPosts> {
-    const page: any = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
+  public async getPostsFirstPage(authorId?: number): Promise<IPagedPosts> {
+    const clauses: string[] = [];
+    // Belt and braces: SharePoint already trims unapproved items out of the
+    // response for anyone without Approve Items, but an approver browsing the
+    // ordinary feed would otherwise see pending posts mixed in with live ones.
+    if (this.moderated) { clauses.push(`OData__ModerationStatus eq ${ModerationStatus.Approved}`); }
+    if (authorId) { clauses.push(`AuthorId eq ${authorId}`); }
+
+    let query = sp.web.lists.getByTitle(this.cfg.postsListTitle).items
       .select(
-        'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
+        'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId', 'AuthorId',
         'Author/Title', 'Author/EMail',
         'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
       )
-      .expand('Author', 'MentionedUsers')
-      // Belt and braces: SharePoint already trims unapproved items out of the
-      // response for anyone without Approve Items, but an approver browsing the
-      // ordinary feed would otherwise see pending posts mixed in with live ones.
-      .filter(`OData__ModerationStatus eq ${ModerationStatus.Approved}`)
+      .expand('Author', 'MentionedUsers');
+    if (clauses.length > 0) { query = query.filter(clauses.join(' and ')); }
+
+    const page: any = await query
       .orderBy('Created', false)
       .top(this.cfg.pageSize)
       .getPaged();
@@ -71,20 +81,23 @@ export class FeedService {
    * link should not see a pending post presented as if it were published.
    */
   public async getPostById(id: number): Promise<IPost> {
+    const fields: string[] = [
+      'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId', 'AuthorId',
+      'Author/Title', 'Author/EMail',
+      'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
+    ];
+    if (this.moderated) { fields.push('OData__ModerationStatus'); }
+
     let it: any;
     try {
       it = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(id)
-        .select(
-          'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
-          'OData__ModerationStatus', 'Author/Title', 'Author/EMail',
-          'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
-        )
+        .select(...fields)
         .expand('Author', 'MentionedUsers')
         .get();
     } catch (e) {
       return null;   // 404 (deleted) or access denied (not approved, not an approver)
     }
-    if (!it || it.OData__ModerationStatus !== ModerationStatus.Approved) { return null; }
+    if (!it || (this.moderated && it.OData__ModerationStatus !== ModerationStatus.Approved)) { return null; }
     const post: IPost = this.mapPost(it);
     await this.attachEngagement([post]);
     return post;
@@ -161,6 +174,7 @@ export class FeedService {
       authorDept: it.Department || '',
       authorDeptId: it.DepartmentId || 0,
       authorEmail: it.Author ? it.Author.EMail : '',
+      authorId: it.AuthorId || 0,
       authorPicUrl: it.Author ? localPhotoUrl(this.cfg.webUrl, it.Author.EMail, 'M') : '',
       created: it.Created,
       likeUserIds: [],        // filled in by attachEngagement
@@ -172,12 +186,15 @@ export class FeedService {
   }
 
   /**
-   * Submit a rich-text post for review. The item is created as Pending by
+   * Save a rich-text post. In Social Corner the item is created as Pending by
    * SharePoint's content approval — the author has no way to publish it
    * directly (requirements 1 and 5) — so this returns the id of something that
-   * is not yet, and may never be, visible to anyone else.
+   * is not yet, and may never be, visible to anyone else. The Market Place has
+   * no approval: there the post is live at once.
+   *
+   * `linkFor` builds the post's share link for the @mention email.
    */
-  public async createPost(draft: IPostDraft, postUrlBase: string): Promise<number> {
+  public async createPost(draft: IPostDraft, linkFor: (id: number) => string, mail?: IMentionMail): Promise<number> {
     const snippet: string = stripHtml(draft.html).substring(0, 80) || 'Discussion';
 
     const mentionIds: number[] = [];
@@ -205,7 +222,7 @@ export class FeedService {
     // Mentions are notified on submission, as before. Whether the post is ever
     // approved is a separate question the recipient will discover by following
     // the link -- an unapproved post is not readable by them.
-    await notifyMentions(draft.mentions, newId, snippet, `${postUrlBase}#post=${newId}`);
+    await notifyMentions(draft.mentions, newId, snippet, linkFor(newId), mail);
     return newId;
   }
 
@@ -253,7 +270,7 @@ export class FeedService {
   /** Lazy-load a thread's comments when a card is expanded. */
   public async getComments(postId: number): Promise<IComment[]> {
     const items: any[] = await sp.web.lists.getByTitle(this.cfg.commentsListTitle).items
-      .select('Id', 'Body', 'Created', 'Author/Title', 'Author/EMail')
+      .select('Id', 'Body', 'Created', 'AuthorId', 'Author/Title', 'Author/EMail')
       .expand('Author')
       .filter(`PostLookupId eq ${postId}`)
       .orderBy('Created', true)
@@ -264,6 +281,7 @@ export class FeedService {
       bodyHtml: it.Body || '',
       authorTitle: it.Author ? it.Author.Title : 'Unknown',
       authorEmail: it.Author ? it.Author.EMail : '',
+      authorId: it.AuthorId || 0,
       authorPicUrl: it.Author ? localPhotoUrl(this.cfg.webUrl, it.Author.EMail, 'S') : '',
       created: it.Created
     }));
@@ -282,13 +300,14 @@ export class FeedService {
       PostLookupId: postId
     });
 
-    const created: any = await add.item.select('Id', 'Created', 'Author/Title', 'Author/EMail')
+    const created: any = await add.item.select('Id', 'Created', 'AuthorId', 'Author/Title', 'Author/EMail')
       .expand('Author').get();
     return {
       id: created.Id,
       bodyHtml: html,
       authorTitle: created.Author ? created.Author.Title : 'You',
       authorEmail: created.Author ? created.Author.EMail : '',
+      authorId: created.AuthorId || 0,
       authorPicUrl: created.Author ? localPhotoUrl(this.cfg.webUrl, created.Author.EMail, 'S') : '',
       created: created.Created
     };

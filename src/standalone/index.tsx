@@ -8,6 +8,7 @@ import { initializeIcons } from 'office-ui-fabric-react/lib/Icons';
 import { sp } from '@pnp/sp';
 
 import DiscussionFeed from '../webparts/discussionFeed/components/DiscussionFeed';
+import FeedHub from '../webparts/discussionFeed/components/FeedHub';
 import { ClassicHttpClient } from './ClassicHttpClient';
 
 export interface IClassicConfig {
@@ -26,6 +27,16 @@ export interface IClassicConfig {
    * page where the feed loads immediately -- see resolvePostPageUrl().
    */
   postPageUrl?: string;
+  /**
+   * The Market Place tab's lists, created by Provision-Marketplace.ps1. Each
+   * defaults to MarketplacePosts / MarketplaceComments / MarketplaceLikes, so
+   * a host need not pass anything; `false` removes the tab.
+   */
+  marketplace?: false | {
+    postsListTitle?: string;
+    commentsListTitle?: string;
+    likesListTitle?: string;
+  };
 }
 
 function ctx(): any {
@@ -125,13 +136,28 @@ function mount(cfg: IClassicConfig, mode: 'feed' | 'moderation'): void {
     return;
   }
 
+  const spHttpClient: ClassicHttpClient = new ClassicHttpClient(webUrl);
+  const pageUrl: string = resolvePostPageUrl(cfg, el);
+
+  // The review queue is Social Corner's alone; the Market Place has no approval.
+  if (mode === 'moderation') {
+    ReactDOM.render(
+      React.createElement(DiscussionFeed as any, { config: feedConfig, spHttpClient, pageUrl, mode }),
+      el
+    );
+    return;
+  }
+
+  const m: any = cfg.marketplace === false ? null : (cfg.marketplace || {});
+  const marketConfig: any = m && {
+    ...feedConfig,
+    postsListTitle: m.postsListTitle || 'MarketplacePosts',
+    commentsListTitle: m.commentsListTitle || 'MarketplaceComments',
+    likesListTitle: m.likesListTitle || 'MarketplaceLikes'
+  };
+
   ReactDOM.render(
-    React.createElement(DiscussionFeed as any, {
-      config: feedConfig,
-      spHttpClient: new ClassicHttpClient(webUrl),
-      pageUrl: resolvePostPageUrl(cfg, el),
-      mode
-    }),
+    React.createElement(FeedHub as any, { socialConfig: feedConfig, marketConfig, spHttpClient, pageUrl }),
     el
   );
 }

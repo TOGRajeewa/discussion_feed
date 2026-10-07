@@ -113,3 +113,18 @@ describe('highlightPraiseNames', () => {
     expect(highlightPraiseNames('<p><em>Praise for</em> nobody</p>', 'm')).toBe('<p><em>Praise for</em> nobody</p>');
   });
 });
+
+import { idFromHash } from '../../src/webparts/discussionFeed/services/utils';
+
+describe('idFromHash', () => {
+  it('reads the id for its own key only', () => {
+    expect(idFromHash('post', '#post=12')).toBe(12);
+    expect(idFromHash('market', '#post=12')).toBeNull();
+    expect(idFromHash('market', '#market=7')).toBe(7);
+  });
+  it('finds the key among other parameters, but not inside another name', () => {
+    expect(idFromHash('market', '#tab=x&market=7')).toBe(7);
+    expect(idFromHash('market', '#supermarket=7')).toBeNull();
+    expect(idFromHash('post', '')).toBeNull();
+  });
+});

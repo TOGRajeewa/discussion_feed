@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { DefaultButton } from 'office-ui-fabric-react/lib/Button';
 import { Spinner, SpinnerSize } from 'office-ui-fabric-react/lib/Spinner';
+import styles from './DiscussionFeed.module.scss';
 import { ThreadCard } from './ThreadCard';
+import { ICategoryDef } from './categories';
 import { IPost, IComment, IShareResult } from '../models';
 
 export interface IFeedListProps {
@@ -12,7 +14,15 @@ export interface IFeedListProps {
   commentsLoading: { [postId: number]: boolean };
   hasNext: boolean;
   loadingMore: boolean;
-  canDelete: boolean;
+  /** Who may delete what; see ThreadCard.canDelete. */
+  canDeletePost: (p: IPost) => boolean;
+  canDeleteComment: (c: IComment) => boolean;
+  /** The feed's post types, for the badge labels. */
+  categories?: ICategoryDef[];
+  /** Shown instead of an empty list; nothing is shown when omitted. */
+  emptyText?: string;
+  /** Element id prefix of the cards; see ThreadCard.idPrefix. */
+  idPrefix?: string;
   onLoadMore: () => void;
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
@@ -33,7 +43,10 @@ export function FeedList(props: IFeedListProps): JSX.Element {
           expanded={props.expandedPostId === p.id}
           commentsLoading={!!props.commentsLoading[p.id]}
           comments={props.commentsByPost[p.id] || []}
-          canDelete={props.canDelete}
+          canDelete={props.canDeletePost(p)}
+          canDeleteComment={props.canDeleteComment}
+          categories={props.categories}
+          idPrefix={props.idPrefix}
           onLike={props.onLike}
           onToggleComments={props.onToggleComments}
           onAddComment={props.onAddComment}
@@ -42,6 +55,9 @@ export function FeedList(props: IFeedListProps): JSX.Element {
           onDeleteComment={props.onDeleteComment}
         />
       ))}
+
+      {props.posts.length === 0 && props.emptyText && !props.loadingMore &&
+        <div className={styles.emptyNote}>{props.emptyText}</div>}
 
       {props.loadingMore &&
         <div style={{ textAlign: 'center', padding: 12 }}>

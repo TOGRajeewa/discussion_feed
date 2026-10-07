@@ -4,6 +4,7 @@ import { CardHeader } from './CardHeader';
 import { EngagementBar } from './EngagementBar';
 import { CommentThread } from './CommentThread';
 import { PostBody } from './PostBody';
+import { ICategoryDef } from './categories';
 import { IPost, IComment, IShareResult } from '../models';
 
 export interface IThreadCardProps {
@@ -13,13 +14,20 @@ export interface IThreadCardProps {
   commentsLoading: boolean;
   comments: IComment[];
   /**
-   * Whether to offer delete. Only a Super Admin can actually delete -- the
-   * permission level denies everyone else -- so this hides a control that
+   * Whether to offer delete on this post: a Super Admin anywhere, and the
+   * author in the Market Place. SharePoint enforces the same rule -- the
+   * lists' permissions refuse everyone else -- so this hides a control that
    * would fail rather than granting anything.
    */
   canDelete: boolean;
+  /** The same decision for each comment. */
+  canDeleteComment: (c: IComment) => boolean;
+  /** The feed's post types, for the badge label. */
+  categories?: ICategoryDef[];
   /** Outline the card -- used for the post a share link opened. */
   highlight?: boolean;
+  /** Element id prefix; each feed has its own, as post ids repeat across lists. */
+  idPrefix?: string;
   onLike: (postId: number) => void;
   onToggleComments: (postId: number) => void;
   onAddComment: (postId: number, html: string) => void;
@@ -64,7 +72,7 @@ export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardSta
 
     return (
       <div
-        id={`df-post-${p.id}`}
+        id={`${this.props.idPrefix || 'df-post-'}${p.id}`}
         className={`${styles.card} ${this.props.highlight ? styles.cardFocused : ''}`}
       >
         <CardHeader
@@ -73,6 +81,7 @@ export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardSta
           picUrl={p.authorPicUrl}
           created={p.created}
           category={p.category}
+          categories={this.props.categories}
         />
 
         <PostBody post={p} />
@@ -113,7 +122,7 @@ export class ThreadCard extends React.Component<IThreadCardProps, IThreadCardSta
           <CommentThread
             comments={this.props.comments}
             loading={this.props.commentsLoading}
-            canDelete={this.props.canDelete}
+            canDelete={this.props.canDeleteComment}
             onAdd={(html: string) => this.props.onAddComment(p.id, html)}
             onDelete={(commentId: number) => this.props.onDeleteComment(p.id, commentId)}
           />

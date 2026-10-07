@@ -7,7 +7,7 @@ import { Avatar } from './Avatar';
 import { TinyMceEditor } from './TinyMceEditor';
 import { ComposerToolbar } from './ComposerToolbar';
 import { PeoplePickerField } from './PeoplePickerField';
-import { CATEGORY_DEFS, categoryDef } from './categories';
+import { CATEGORY_DEFS, categoryDef, ICategoryDef } from './categories';
 import { uploadFeedImage } from '../services/UploadService';
 import { stripHtml } from '../services/utils';
 import {
@@ -23,6 +23,16 @@ export interface IPostSubmitBoxProps {
   /** Offered only when `department` is null, so a post is never left unroutable. */
   departmentOptions: IDepartment[];
   onSubmit: (draft: IPostDraft) => Promise<void>;
+  /** Post types this feed offers; Social Corner's when omitted. */
+  categories?: ICategoryDef[];
+  /** Placeholder of the collapsed box. */
+  prompt?: string;
+  /**
+   * Posts go for approval (Social Corner, the default): the button reads
+   * "Submit for review", a department is required to route the post, and the
+   * author is told it is not live yet. False for the Market Place.
+   */
+  reviewed?: boolean;
 }
 
 export interface IPostSubmitBoxState {
@@ -67,8 +77,11 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   }
 
   private get needsDepartmentPick(): boolean {
-    return !this.props.department && (this.props.departmentOptions || []).length > 0;
+    return this.reviewed && !this.props.department && (this.props.departmentOptions || []).length > 0;
   }
+
+  private get defs(): ICategoryDef[] { return this.props.categories || CATEGORY_DEFS; }
+  private get reviewed(): boolean { return this.props.reviewed !== false; }
 
   private expand = (category: PostCategory): void => {
     this.setState({ expanded: true, category });
@@ -123,8 +136,9 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   private get canSubmit(): boolean {
     if (this.state.submitting) { return false; }
     // Without a department the post would sit in a queue no admin owns, so it
-    // cannot be submitted until one is resolved or chosen.
-    if (!this.chosenDepartment) { return false; }
+    // cannot be submitted until one is resolved or chosen. Unreviewed posts
+    // only show the department on the card, so they do not need one.
+    if (this.reviewed && !this.chosenDepartment) { return false; }
     if (this.state.category === 'Question') { return !!this.state.questionTitle.trim(); }
     if (this.state.category === 'Praise') { return this.state.praisePeople.length > 0; }
     return !!stripHtml(this.state.html) || this.state.attachedImages.length > 0;
@@ -161,8 +175,9 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
         department: this.chosenDepartment
       });
       // Collapse to the confirmation rather than to the feed: the post is
-      // Pending, so there is nothing for the author to see yet.
-      this.setState(this.empty('Discussion', true));
+      // Pending, so there is nothing for the author to see yet. An unreviewed
+      // post is already at the top of the feed, which says enough.
+      this.setState(this.empty('Discussion', this.reviewed));
     } catch (e) {
       this.setState({ submitting: false });
     }
@@ -221,11 +236,11 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
         <div className={styles.collapsedRow}>
           <Avatar name={this.props.currentUser.title} picUrl={this.props.currentUser.picUrl} />
           <div className={styles.collapsedPlaceholder} onClick={() => this.expand('Discussion')}>
-            Share thoughts, ideas, or updates
+            {this.props.prompt || 'Share thoughts, ideas, or updates'}
           </div>
         </div>
         <div className={styles.typeTabs}>
-          {CATEGORY_DEFS.map(c => (
+          {this.defs.map(c => (
             <button type="button" key={c.key} className={styles.typeTab} onClick={() => this.expand(c.key)}>
               <Icon iconName={c.iconName} style={{ color: c.color }} />
               <span>{c.label}</span>
@@ -237,7 +252,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   }
 
   private renderExpanded(): JSX.Element {
-    const def = categoryDef(this.state.category);
+    const def = categoryDef(this.state.category, this.defs);
     const cfg: IFeedConfig = this.props.config;
     return (
       <div className={`${styles.card} ${styles.submitBox}`}>
@@ -317,6 +332,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
         <div className={styles.composerBottom}>
           <ComposerToolbar
             category={this.state.category}
+            categories={this.defs}
             onCategoryChange={(c: PostCategory) => this.setState({ category: c })}
             exec={this.exec}
             insert={this.insert}
@@ -327,10 +343,12 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
           />
           <PrimaryButton
             className={styles.postButton}
-            // "Post"/"Ask" would overpromise: the author is submitting for
-            // review, not publishing (requirement 5).
-            text={this.state.submitting ? '…' : 'Submit for review'}
-            title={`${def.submitLabel} — sent to your department administrator for approval`}
+            // "Post"/"Ask" would overpromise in Social Corner: the author is
+            // submitting for review, not publishing (requirement 5).
+            text={this.state.submitting ? '…' : (this.reviewed ? 'Submit for review' : def.submitLabel)}
+            title={this.reviewed
+              ? `${def.submitLabel} — sent to your department administrator for approval`
+              : `${def.submitLabel} — visible to everyone straight away`}
             disabled={!this.canSubmit}
             onClick={this.submit}
           />
