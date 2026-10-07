@@ -99,14 +99,23 @@ Check "$L indexed on PostId" (& $idx $L 'PostId') ''
 $authorId = (Req $author '/web/currentuser?$select=Id').Data.Id
 $otherId  = (Req $other  '/web/currentuser?$select=Id').Data.Id
 
+# The widget's own queries (FeedService), so a column the widget reads but a
+# list lacks fails here with a 400. In the widget some of these failures are
+# quiet -- like counts would just read 0.
+$POSTQ = '$select=Id,Title,Body,Category,Created,Department,DepartmentId,AuthorId,Author/Title,Author/EMail,' +
+         'MentionedUsers/Title,MentionedUsers/Name,MentionedUsers/EMail&$expand=Author,MentionedUsers'
+
 # ------------------------------------------------------------------ posts --
 Write-Host "`nPosts" -ForegroundColor Cyan
 $add = Add $author $P @{ Title = $marker; Body = "<p>$marker</p>"; Category = 'Discussion' }
 Check "$AuthorUser can post" $add.Ok (Why $add)
 $postId = $add.Data.Id
 
-$feed = (Req $other "/web/lists/getbytitle('$P')/items?`$select=Id,AuthorId&`$orderby=Created desc&`$top=20").Data.value
-Check "$OtherUser sees the post straight away (no approval)" ([bool]($feed | Where-Object { $_.Id -eq $postId })) 'not in the feed query'
+$feed = Req $other "/web/lists/getbytitle('$P')/items?$POSTQ&`$orderby=Created desc&`$top=20"
+Check "$OtherUser sees the post straight away (widget's feed query, no approval)" `
+  ($feed.Ok -and [bool]($feed.Data.value | Where-Object { $_.Id -eq $postId })) (Why $feed)
+$one = Req $other "/web/lists/getbytitle('$P')/items($postId)?$POSTQ"
+Check "the widget's single-post query (share links) works" ($one.Ok -and $one.Data.Id -eq $postId) (Why $one)
 
 $r = Merge $other $P $postId @{ Title = "$marker (edited by $OtherUser)" }
 Check "$OtherUser cannot edit it" (Denied $r) "expected access denied: $(Why $r)"
@@ -119,6 +128,13 @@ Check "$ContentAdminUser (Content Admin) cannot delete it" (Denied $r) "expected
 Write-Host "`nLikes" -ForegroundColor Cyan
 $like = Add $other $L @{ Title = "Post $postId"; PostId = $postId }
 Check "$OtherUser can like it" $like.Ok (Why $like)
+$q = Req $other "/web/lists/getbytitle('$L')/items?`$select=PostId,LikedBy/Id,Author/Id&`$expand=LikedBy,Author&`$filter=PostId eq $postId&`$top=4000"
+Check "the widget's like-count query works and counts the like" `
+  ($q.Ok -and [bool]($q.Data.value | Where-Object { $_.Author.Id -eq $otherId })) (Why $q)
+$q = Req $other "/web/lists/getbytitle('$L')/items?`$select=LikedBy/Id,Author/Id&`$expand=LikedBy,Author&`$filter=PostId eq $postId&`$top=4000"
+Check "the widget's after-like re-read works" $q.Ok (Why $q)
+$q = Req $other "/web/lists/getbytitle('$L')/items?`$select=Id&`$filter=PostId eq $postId and AuthorId eq $otherId&`$top=10"
+Check "the widget's 'my like' lookup finds it" ($q.Ok -and @($q.Data.value).Count -eq 1) (Why $q)
 $r = Remove $author $L $like.Data.Id
 Check "$AuthorUser cannot remove $OtherUser's like" (Denied $r) "expected access denied: $(Why $r)"
 $r = Remove $other $L $like.Data.Id
@@ -128,6 +144,10 @@ Check "$OtherUser can remove their own like" $r.Ok (Why $r)
 Write-Host "`nComments" -ForegroundColor Cyan
 $c1 = Add $other $C @{ Title = "$marker comment"; Body = '<p>test comment</p>'; PostLookupId = $postId }
 Check "$OtherUser can comment" $c1.Ok (Why $c1)
+$q = Req $author "/web/lists/getbytitle('$C')/items?`$select=PostLookupId&`$filter=PostLookupId eq $postId&`$top=4000"
+Check "the widget's comment-count query works and counts it" ($q.Ok -and @($q.Data.value).Count -eq 1) (Why $q)
+$q = Req $author "/web/lists/getbytitle('$C')/items?`$select=Id,Body,Created,AuthorId,Author/Title,Author/EMail&`$expand=Author&`$filter=PostLookupId eq $postId&`$orderby=Created asc"
+Check "the widget's comments query works" ($q.Ok -and @($q.Data.value).Count -eq 1 -and $q.Data.value[0].AuthorId -eq $otherId) (Why $q)
 $r = Remove $author $C $c1.Data.Id
 Check "$AuthorUser cannot delete $OtherUser's comment" (Denied $r) "expected access denied: $(Why $r)"
 $r = Remove $other $C $c1.Data.Id
@@ -138,7 +158,7 @@ Check "$SuperAdminUser (Super Admin) can delete anyone's comment" $r.Ok (Why $r)
 
 # --------------------------------------------------------------- my posts --
 Write-Host "`nMy posts" -ForegroundColor Cyan
-$mine = (Req $author "/web/lists/getbytitle('$P')/items?`$select=Id,AuthorId&`$filter=AuthorId eq $authorId&`$orderby=Created desc&`$top=50").Data.value
+$mine = (Req $author "/web/lists/getbytitle('$P')/items?$POSTQ&`$filter=AuthorId eq $authorId&`$orderby=Created desc&`$top=50").Data.value
 Check "$AuthorUser's 'My posts' has the post and only their own" `
   ([bool]($mine | Where-Object { $_.Id -eq $postId }) -and -not ($mine | Where-Object { $_.AuthorId -ne $authorId })) "$(@($mine).Count) rows"
 $theirs = (Req $other "/web/lists/getbytitle('$P')/items?`$select=Id&`$filter=AuthorId eq $otherId&`$top=50").Data.value

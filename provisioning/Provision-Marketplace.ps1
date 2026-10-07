@@ -21,7 +21,11 @@
                          the widget still uses. Created By and Created are
                          indexed so "My posts" keeps working past 5,000 items.
     MarketplaceComments  Body, PostLookup -> MarketplacePosts (indexed).
-    MarketplaceLikes     PostId (indexed). The liker is the row's Created By.
+    MarketplaceLikes     PostId (indexed), LikedBy. The liker is the row's
+                         Created By; LikedBy is never written here, but the
+                         widget reads it on every likes list (Social Corner's
+                         migrated likes are attributed through it), so a
+                         likes list without it fails the like queries.
 
   Permissions on all three: inheritance broken; Everyone = Contribute; every
   other principal removed -- the site owners group included -- so deleting
@@ -155,6 +159,9 @@ if ($comments) { Ensure-Indexed $comments $CommentsListTitle 'PostLookup' }
 
 Ensure-Field $likes $LikesListTitle 'PostId' `
   '<Field Type="Number" DisplayName="PostId" Name="PostId" StaticName="PostId" Decimals="0" Indexed="TRUE" Required="TRUE" />'
+# Same column as DiscussionLikes.LikedBy; see the header.
+Ensure-Field $likes $LikesListTitle 'LikedBy' `
+  '<Field Type="User" DisplayName="LikedBy" Name="LikedBy" StaticName="LikedBy" UserSelectionMode="PeopleOnly" />'
 
 # ------------------------------------------------------------- 3. settings --
 Write-Host "`n[3/4] No approval; users edit and delete only their own items" -ForegroundColor Cyan
