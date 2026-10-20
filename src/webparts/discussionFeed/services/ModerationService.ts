@@ -149,8 +149,26 @@ export class ModerationService {
     };
   }
 
-  public async approve(postId: number): Promise<void> {
-    await this.setStatus(postId, ModerationStatus.Approved, '');
+  /**
+   * Approve, recording when and by whom: Expire-SocialPosts.ps1 counts a post's
+   * month from PublishedOn. These must go in the SAME write as the status --
+   * written on their own they would send the post straight back to Pending
+   * (checked on dev). On a site where Provision-Expiry.ps1 has not run yet
+   * the columns do not exist, so approve without them.
+   */
+  public async approve(postId: number, approverId?: number): Promise<void> {
+    const fields: any = {
+      OData__ModerationStatus: ModerationStatus.Approved,
+      OData__ModerationComments: '',
+      PublishedOn: new Date().toISOString()
+    };
+    if (approverId) { fields.ApprovedById = approverId; }
+    try {
+      await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId).update(fields);
+    } catch (e) {
+      if (!/PublishedOn|ApprovedBy/.test(String((e && e.message) || e))) { throw e; }
+      await this.setStatus(postId, ModerationStatus.Approved, '');
+    }
   }
 
   public async reject(postId: number, reason: string): Promise<void> {

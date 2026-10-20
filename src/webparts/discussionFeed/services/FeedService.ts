@@ -26,8 +26,29 @@ function toArray(v: any): any[] {
 }
 
 export class FeedService {
-  /** `moderated` is false for the Market Place, whose list has no content approval. */
-  constructor(private cfg: IFeedConfig, private moderated: boolean = true) { }
+  /**
+   * `moderated` is false for the Market Place, whose list has no content
+   * approval. `expires` is true for Social Corner: posts that
+   * Expire-SocialPosts.ps1 has flagged Expired stay in the list but are no
+   * longer shown.
+   */
+  constructor(private cfg: IFeedConfig, private moderated: boolean = true, private expires: boolean = false) { }
+
+  /**
+   * The Expired column arrives with Provision-Expiry.ps1. On a site where it
+   * has not run yet, any query naming the column fails; carry on without the
+   * filter rather than break the feed -- nothing there can be expired anyway.
+   */
+  private async withExpiry<T>(run: (expiry: boolean) => Promise<T>): Promise<T> {
+    if (!this.expires) { return run(false); }
+    try {
+      return await run(true);
+    } catch (e) {
+      if (!/Expired/.test(String((e && e.message) || e))) { throw e; }
+      this.expires = false;
+      return run(false);
+    }
+  }
 
   /** Current user for the submit-box Persona. */
   public async getCurrentUser(): Promise<ICurrentUser> {
@@ -50,33 +71,38 @@ export class FeedService {
    * Place, whose list is indexed on Created By for exactly this filter).
    */
   public async getPostsFirstPage(authorId?: number): Promise<IPagedPosts> {
-    const clauses: string[] = [];
-    // Belt and braces: SharePoint already trims unapproved items out of the
-    // response for anyone without Approve Items, but an approver browsing the
-    // ordinary feed would otherwise see pending posts mixed in with live ones.
-    if (this.moderated) { clauses.push(`OData__ModerationStatus eq ${ModerationStatus.Approved}`); }
-    if (authorId) { clauses.push(`AuthorId eq ${authorId}`); }
+    const page: any = await this.withExpiry((expiry: boolean) => {
+      const clauses: string[] = [];
+      // Belt and braces: SharePoint already trims unapproved items out of the
+      // response for anyone without Approve Items, but an approver browsing the
+      // ordinary feed would otherwise see pending posts mixed in with live ones.
+      if (this.moderated) { clauses.push(`OData__ModerationStatus eq ${ModerationStatus.Approved}`); }
+      // "ne 1", not "eq 0": posts from before the column existed read empty,
+      // not No, and "eq 0" would hide every one of them.
+      if (expiry) { clauses.push('Expired ne 1'); }
+      if (authorId) { clauses.push(`AuthorId eq ${authorId}`); }
 
-    let query = sp.web.lists.getByTitle(this.cfg.postsListTitle).items
-      .select(
-        'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId', 'AuthorId',
-        'Author/Title', 'Author/EMail',
-        'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
-      )
-      .expand('Author', 'MentionedUsers');
-    if (clauses.length > 0) { query = query.filter(clauses.join(' and ')); }
+      let query = sp.web.lists.getByTitle(this.cfg.postsListTitle).items
+        .select(
+          'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId', 'AuthorId',
+          'Author/Title', 'Author/EMail',
+          'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
+        )
+        .expand('Author', 'MentionedUsers');
+      if (clauses.length > 0) { query = query.filter(clauses.join(' and ')); }
 
-    const page: any = await query
-      .orderBy('Created', false)
-      .top(this.cfg.pageSize)
-      .getPaged();
+      return query
+        .orderBy('Created', false)
+        .top(this.cfg.pageSize)
+        .getPaged();
+    });
 
     return this.wrapPage(page);
   }
 
   /**
    * One post, for a shared "#post=<id>" link. Returns null when the post does
-   * not exist, cannot be read, or is not approved -- SharePoint already hides
+   * not exist, cannot be read, has expired, or is not approved -- SharePoint already hides
    * unapproved posts from non-approvers, and an approver following a share
    * link should not see a pending post presented as if it were published.
    */
@@ -90,14 +116,17 @@ export class FeedService {
 
     let it: any;
     try {
-      it = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(id)
-        .select(...fields)
-        .expand('Author', 'MentionedUsers')
-        .get();
+      it = await this.withExpiry((expiry: boolean) =>
+        sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(id)
+          .select(...fields.concat(expiry ? ['Expired'] : []))
+          .expand('Author', 'MentionedUsers')
+          .get());
     } catch (e) {
       return null;   // 404 (deleted) or access denied (not approved, not an approver)
     }
     if (!it || (this.moderated && it.OData__ModerationStatus !== ModerationStatus.Approved)) { return null; }
+    // Gone from the feed, so gone from share links too.
+    if (it.Expired === true) { return null; }
     const post: IPost = this.mapPost(it);
     await this.attachEngagement([post]);
     return post;

@@ -18,6 +18,11 @@ export interface IFeedKind {
    * tab for approvers, and a department is required to route each post.
    */
   moderated: boolean;
+  /**
+   * Posts flagged Expired (by Expire-SocialPosts.ps1, a month after they were
+   * published) are hidden. They stay in the list.
+   */
+  expires: boolean;
   /** Authors may delete their own posts and comments. Super Admins always can. */
   authorsDelete: boolean;
   /** Offer the All posts / My posts filter. */
@@ -40,6 +45,7 @@ export const SOCIAL_KIND: IFeedKind = {
   label: 'Social Corner',
   iconName: 'People',
   moderated: true,
+  expires: true,
   authorsDelete: false,
   mineFilter: false,
   categories: CATEGORY_DEFS,
@@ -54,6 +60,7 @@ export const MARKET_KIND: IFeedKind = {
   label: 'Market Place',
   iconName: 'Shop',
   moderated: false,
+  expires: false,
   authorsDelete: true,
   mineFilter: true,
   categories: MARKET_CATEGORY_DEFS,

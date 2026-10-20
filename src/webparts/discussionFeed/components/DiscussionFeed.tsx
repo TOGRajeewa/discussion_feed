@@ -63,7 +63,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   constructor(props: IDiscussionFeedProps) {
     super(props);
     const kind: IFeedKind = props.kind || SOCIAL_KIND;
-    this.svc = new FeedService(props.config, kind.moderated);
+    this.svc = new FeedService(props.config, kind.moderated, kind.expires);
     this.mod = new ModerationService(props.config);
     this.depts = new DepartmentService(props.config);
     const sharedId: number = props.mode === 'moderation' ? null : (idFromHash(kind.hashKey) || null);
@@ -291,7 +291,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
 
   private onApprove = async (postId: number): Promise<void> => {
     try {
-      await this.mod.approve(postId);
+      await this.mod.approve(postId, this.state.currentUser.id);
       // Drop it from the queue and pull the now-published post into the feed.
       this.setState({ pending: this.state.pending.filter((p: IPost) => p.id !== postId) });
       await this.reloadFeed();
@@ -571,7 +571,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
           <Icon iconName="Info" />
           <span className={styles.sharedNoteText}>
             {this.kind.moderated
-              ? "This post isn't available. It may have been removed, or it may still be waiting for approval."
+              ? "This post isn't available. It may have been removed or expired, or it may still be waiting for approval."
               : "This post isn't available. It may have been removed."}
           </span>
           <button type="button" className={styles.sharedClose} onClick={this.closeSharedPost}>Show all posts</button>
