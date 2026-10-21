@@ -151,7 +151,7 @@ export class ModerationService {
 
   /**
    * Approve, recording when and by whom: Expire-SocialPosts.ps1 counts a post's
-   * month from PublishedOn. These must go in the SAME write as the status --
+   * 60 days from PublishedOn. These must go in the SAME write as the status --
    * written on their own they would send the post straight back to Pending
    * (checked on dev). On a site where Provision-Expiry.ps1 has not run yet
    * the columns do not exist, so approve without them.

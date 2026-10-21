@@ -1,10 +1,11 @@
 <#
-  Nightly job: flags Social Corner posts Expired once they are more than a
-  month old. The widget then stops showing them (home page and the full
-  Social Corner page). Nothing is deleted: the posts stay in DiscussionPosts
-  with Expired = Yes. The Market Place is not touched.
+  Nightly job: flags Social Corner posts Expired once they were published more
+  than 60 days ago (the client's figure; -Days changes it). The widget then
+  stops showing them (home page and the full Social Corner page). Nothing is
+  deleted: the posts stay in DiscussionPosts with Expired = Yes. The Market
+  Place is not touched.
 
-  A post's month counts from PublishedOn, which the widget records on
+  A post's age counts from PublishedOn, which the widget records on
   Approve. Posts approved before that existed, or approved from the
   SharePoint list, have none; for them the last-modified date is used, which
   for an approved post is its approval time (likes and comments are stored in
@@ -28,7 +29,7 @@ param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [pscredential] $Credential,
   # Age, in days since publishing, at which a post expires.
-  [int] $Days = 30,
+  [int] $Days = 60,
   # Only these posts: for testing, or to check particular posts.
   [int[]] $PostId,
   [string] $LogPath,

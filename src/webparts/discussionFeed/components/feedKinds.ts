@@ -19,7 +19,7 @@ export interface IFeedKind {
    */
   moderated: boolean;
   /**
-   * Posts flagged Expired (by Expire-SocialPosts.ps1, a month after they were
+   * Posts flagged Expired (by Expire-SocialPosts.ps1, 60 days after they were
    * published) are hidden. They stay in the list.
    */
   expires: boolean;

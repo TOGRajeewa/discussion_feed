@@ -91,12 +91,12 @@ function NewPost([string] $suffix) {
 
 # ---------------------------------------------------------------- approve --
 Write-Host "`nApprove (as the widget does)" -ForegroundColor Cyan
-$a = NewPost 'A (fresh)'; $b = NewPost 'B (40 days old)'; $c = NewPost 'C (approved from the list)'
+$a = NewPost 'A (fresh)'; $b = NewPost 'B (70 days old)'; $c = NewPost 'C (approved from the list)'
 $r = Merge $approver $a @{ OData__ModerationStatus = 0; OData__ModerationComments = ''; PublishedOn = (Get-Date).ToUniversalTime().ToString('o'); ApprovedById = $approverId }
 $s = State $a
 Check "approving with PublishedOn + ApprovedBy keeps the post Approved" ($r.Ok -and $s.OData__ModerationStatus -eq 0) "$(Why $r); status $($s.OData__ModerationStatus)"
 Check "PublishedOn and ApprovedBy are recorded" ([bool]$s.PublishedOn -and $s.ApprovedById -eq $approverId) "PublishedOn=$($s.PublishedOn) ApprovedById=$($s.ApprovedById)"
-Merge $approver $b @{ OData__ModerationStatus = 0; OData__ModerationComments = ''; PublishedOn = (Get-Date).ToUniversalTime().AddDays(-40).ToString('o'); ApprovedById = $approverId } | Out-Null
+Merge $approver $b @{ OData__ModerationStatus = 0; OData__ModerationComments = ''; PublishedOn = (Get-Date).ToUniversalTime().AddDays(-70).ToString('o'); ApprovedById = $approverId } | Out-Null
 Merge $approver $c @{ OData__ModerationStatus = 0; OData__ModerationComments = '' } | Out-Null   # no PublishedOn: as if approved in the list
 $feed = FeedIds
 Check "$ReaderUser sees all three in the widget's feed" (($feed -contains $a) -and ($feed -contains $b) -and ($feed -contains $c)) "feed has: $(($feed | Where-Object { $_ -in $a, $b, $c }) -join ',')"
@@ -110,10 +110,10 @@ Check 'a dry run changes nothing' (-not $sa.Expired -and -not $sb.Expired) "A=$(
 
 & $job -SiteUrl $SiteUrl -Credential $super -PostId $a, $b, $c *> $null
 $sa = State $a; $sb = State $b; $sc = State $c
-Check 'post published 40 days ago is now Expired' ($sb.Expired -eq $true) "Expired=$($sb.Expired)"
+Check 'post published 70 days ago is now Expired (default 60 days)' ($sb.Expired -eq $true) "Expired=$($sb.Expired)"
 Check '...and still Approved' ($sb.OData__ModerationStatus -eq 0) "status $($sb.OData__ModerationStatus)"
 Check '...with a Log line saying when, by whom and why' `
-  ([string]$sb.Log -match '^\d{4}-\d\d-\d\d \d\d:\d\d UTC  Expired = Yes, set by Expire-SocialPosts\.ps1 as .+: published .+\(PublishedOn\), more than 30 days ago\. Kept Approved') "Log: $($sb.Log)"
+  ([string]$sb.Log -match '^\d{4}-\d\d-\d\d \d\d:\d\d UTC  Expired = Yes, set by Expire-SocialPosts\.ps1 as .+: published .+\(PublishedOn\), more than 60 days ago\. Kept Approved') "Log: $($sb.Log)"
 Check 'post published today is not expired' (-not $sa.Expired) "Expired=$($sa.Expired)"
 Check 'post approved today from the list (no PublishedOn) is not expired' (-not $sc.Expired) "Expired=$($sc.Expired)"
 

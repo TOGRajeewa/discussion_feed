@@ -1,15 +1,15 @@
 <#
-  Social Corner posts expire one month after they are published. Expired
+  Social Corner posts expire 60 days after they are published. Expired
   posts are NOT deleted: they stay in DiscussionPosts, flagged, and the widget
   stops showing them (home page and the full Social Corner page). The
   Market Place is not affected.
 
-  Adds three columns to DiscussionPosts:
+  Adds four columns to DiscussionPosts:
 
     PublishedOn  Date and time   Set by the widget when an admin clicks Approve.
     ApprovedBy   Person          Set alongside it.
     Expired      Yes/No          Set to Yes by Expire-SocialPosts.ps1 once a post
-                                 is older than a month. Indexed: the feed filters
+                                 is more than 60 days old. Indexed: the feed filters
                                  on it.
     Log          Plain text      One line appended per change the job makes,
                  (multi-line)    saying when, by which account and why -- the
