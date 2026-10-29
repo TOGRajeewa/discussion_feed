@@ -35,12 +35,12 @@
   To remove it: deploy a bundle without the Market Place tab, then delete the
   three lists by hand (that deletes every Market Place post).
 
-  Run with PowerShell 7 (pwsh) as a Site Collection Administrator.
+  Runs in Windows PowerShell 5.1 or PowerShell 7, as a Site Collection Administrator.
 
-    pwsh .\Provision-Marketplace.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
-    pwsh .\Provision-Marketplace.ps1 -SiteUrl "https://mansaladev.cbsl.lk"
+    .\Provision-Marketplace.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
+    .\Provision-Marketplace.ps1 -SiteUrl "https://mansaladev.cbsl.lk"
 #>
-#Requires -Version 7.0
+#Requires -Version 5.1
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [pscredential] $Credential,

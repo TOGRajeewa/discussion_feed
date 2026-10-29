@@ -23,10 +23,10 @@
   Adding columns does not touch any post, so it cannot send one back to
   Pending. Idempotent -- safe to re-run. -DryRun prints the plan only.
 
-    pwsh .\Provision-Expiry.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
-    pwsh .\Provision-Expiry.ps1 -SiteUrl "https://mansaladev.cbsl.lk"
+    .\Provision-Expiry.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
+    .\Provision-Expiry.ps1 -SiteUrl "https://mansaladev.cbsl.lk"
 #>
-#Requires -Version 7.0
+#Requires -Version 5.1
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [pscredential] $Credential,

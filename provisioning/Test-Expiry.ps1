@@ -13,9 +13,9 @@
     * writing Expired on its own sends a post back to Pending, which is why
       the job never does that.
 
-    pwsh .\Test-Expiry.ps1 -SiteUrl "http://124.43.17.138:9371"
+    .\Test-Expiry.ps1 -SiteUrl "http://124.43.17.138:9371"
 #>
-#Requires -Version 7.0
+#Requires -Version 5.1
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [string] $Domain = 'ad-him',
@@ -28,6 +28,7 @@ param(
 $ErrorActionPreference = 'Continue'
 $SiteUrl = $SiteUrl.TrimEnd('/')
 Import-Module (Join-Path $PSScriptRoot 'TestAccounts.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force   # transport and JSON helpers for 5.1 and 7
 function Cred($u) { Get-TestCredential -User $u -Domain $Domain }
 
 $pass = 0; $fail = 0
@@ -40,11 +41,11 @@ function Req {
   $h = @{ Accept = 'application/json;odata=nometadata' }
   if ($Extra) { $Extra.GetEnumerator() | ForEach-Object { $h[$_.Key] = $_.Value } }
   $req = @{ Uri = "$SiteUrl/_api$Path"; Method = $Method; Headers = $h
-            Credential = $Cred; AllowUnencryptedAuthentication = $true }
-  if ($Body) { $req['Body'] = ($Body | ConvertTo-Json -Depth 10 -Compress); $req['ContentType'] = 'application/json;odata=verbose' }
+            Credential = $Cred } + (Get-SPTransportArgs)
+  if ($Body) { $req['Body'] = ConvertTo-SPBody $Body; $req['ContentType'] = 'application/json;odata=verbose;charset=utf-8' }
   try {
     $r = Invoke-WebRequest @req -ErrorAction Stop
-    $data = if ([string]::IsNullOrWhiteSpace($r.Content)) { $null } else { $r.Content | ConvertFrom-Json -AsHashtable }
+    $data = if ([string]::IsNullOrWhiteSpace($r.Content)) { $null } else { ConvertFrom-SPJson $r.Content -AsHashtable }
     return @{ Ok = $true; Status = [int]$r.StatusCode; Data = $data }
   } catch {
     return @{ Ok = $false; Status = [int]$_.Exception.Response.StatusCode; Data = $null; Err = $_.Exception.Message }
@@ -92,6 +93,9 @@ function NewPost([string] $suffix) {
 # ---------------------------------------------------------------- approve --
 Write-Host "`nApprove (as the widget does)" -ForegroundColor Cyan
 $a = NewPost 'A (fresh)'; $b = NewPost 'B (70 days old)'; $c = NewPost 'C (approved from the list)'
+Check "$AuthorUser can create the three test posts" ([bool]($a -and $b -and $c)) 'cannot go on without them'
+# Every later step targets these posts by id; never run them with an empty one.
+if (-not ($a -and $b -and $c)) { Write-Host "`n$pass passed, $fail failed" -ForegroundColor Red; exit 1 }
 $r = Merge $approver $a @{ OData__ModerationStatus = 0; OData__ModerationComments = ''; PublishedOn = (Get-Date).ToUniversalTime().ToString('o'); ApprovedById = $approverId }
 $s = State $a
 Check "approving with PublishedOn + ApprovedBy keeps the post Approved" ($r.Ok -and $s.OData__ModerationStatus -eq 0) "$(Why $r); status $($s.OData__ModerationStatus)"

@@ -21,10 +21,10 @@
   Collection Administrator; without -Credential it signs in as that account.
   Exit code 1 when any post could not be flagged, so the task shows a failure.
 
-    pwsh .\Expire-SocialPosts.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
-    pwsh .\Expire-SocialPosts.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -LogPath "D:\Logs\social-expiry.log"
+    .\Expire-SocialPosts.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -DryRun
+    .\Expire-SocialPosts.ps1 -SiteUrl "https://mansaladev.cbsl.lk" -LogPath "D:\Logs\social-expiry.log"
 #>
-#Requires -Version 7.0
+#Requires -Version 5.1
 param(
   [Parameter(Mandatory = $true)] [string] $SiteUrl,
   [pscredential] $Credential,
@@ -38,6 +38,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'SPRest.psm1') -Force
+
+# -PostId given but empty (e.g. a variable that was never set) must not
+# quietly become "every post".
+if ($PSBoundParameters.ContainsKey('PostId') -and -not ($PostId | Where-Object { $_ -gt 0 })) {
+  throw '-PostId was given but holds no post id. Leave it out to check every post.'
+}
 
 function Log([string] $Message, [string] $Colour = 'Gray') {
   $line = '{0:yyyy-MM-dd HH:mm:ss}  {1}' -f (Get-Date), $Message

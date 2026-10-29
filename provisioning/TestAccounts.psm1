@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
   Supplies credentials for the moderation test scripts WITHOUT putting them in
   the repository. Earlier revisions of those scripts had the test-account
@@ -24,7 +24,7 @@ function Get-TestAccountTable {
   $table = @{}
   $file = Join-Path $PSScriptRoot 'test-accounts.local.json'
   if (Test-Path $file) {
-    $json = Get-Content $file -Raw | ConvertFrom-Json
+    $json = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($p in $json.PSObject.Properties) { $table[$p.Name.ToLower()] = $p.Value }
   }
 
