@@ -14,7 +14,8 @@ import { ModerationService } from '../services/ModerationService';
 import { DepartmentService } from '../services/DepartmentService';
 import { copyText, idFromHash } from '../services/utils';
 import {
-  IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole, IShareResult
+  IPost, IComment, ICurrentUser, IPostDraft, IPagedPosts, IDepartment, IModeratorRole, IShareResult,
+  IReviewConflict, IReviewNotice, ModerationStatus
 } from '../models';
 
 type FeedTab = 'feed' | 'queue';
@@ -37,6 +38,8 @@ export interface IDiscussionFeedState {
   pending: IPost[];
   pendingLoading: boolean;
   queueDeptId: number;
+  /** Approves/rejects SharePoint refused because the post had changed, by post id. */
+  notices: { [postId: number]: IReviewNotice };
   // --- shared-post link (#post=<id>, #market=<id>) ---
   focusPostId: number;
   /** The shared post when it is not already in `posts` (e.g. older than page one). */
@@ -53,12 +56,20 @@ export interface IDiscussionFeedState {
 
 const NO_ROLE: IModeratorRole = { isSuperAdmin: false, departments: [], canModerate: false };
 
+/** Least time between review-queue reloads triggered by the window regaining focus. */
+const QUEUE_RELOAD_GAP_MS: number = 15000;
+
 export default class DiscussionFeed extends React.Component<IDiscussionFeedProps, IDiscussionFeedState> {
   private svc: FeedService;
   private mod: ModerationService;
   private depts: DepartmentService;
   private pager: IPagedPosts = null;   // current tail of the server-side page chain
   private feedSeq: number = 0;          // drops page-one responses a newer request superseded
+  // Orders review-queue reloads against decisions made while they were in flight; see refreshQueue().
+  private queueClock: number = 0;
+  private queueLoadStarted: number = 0;
+  private decidedAt: { [postId: number]: number } = {};
+  private lastQueueLoad: number = 0;
 
   constructor(props: IDiscussionFeedProps) {
     super(props);
@@ -86,6 +97,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       pending: [],
       pendingLoading: false,
       queueDeptId: 0,
+      notices: {},
       // Start in the single-post view when opened from a share link, so the
       // full feed never flashes up before the post loads.
       focusPostId: sharedId,
@@ -101,6 +113,19 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
 
   public componentWillUnmount(): void {
     window.removeEventListener('hashchange', this.onHashChange);
+    window.removeEventListener('focus', this.onWindowFocus);
+  }
+
+  /**
+   * Coming back to this window -- say from another browser, where a different
+   * moderator has just decided a post -- reloads an open review queue, so the
+   * post drops out before anyone acts on it. Throttled, since focus also fires
+   * on returning from a dialog or from a click into a frame.
+   */
+  private onWindowFocus = (): void => {
+    if (this.state.tab !== 'queue' || !this.state.role.canModerate) { return; }
+    if (Date.now() - this.lastQueueLoad < QUEUE_RELOAD_GAP_MS) { return; }
+    this.refreshQueue(this.state.role, this.state.queueDeptId, true);
   }
 
   private onHashChange = (): void => {
@@ -195,7 +220,10 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     try {
       const role: IModeratorRole = await this.mod.getRole();
       this.setState({ role, tab: role.canModerate ? this.state.tab : 'feed' });
-      if (role.canModerate) { await this.refreshQueue(role, 0); }
+      if (role.canModerate) {
+        window.addEventListener('focus', this.onWindowFocus);
+        await this.refreshQueue(role, 0);
+      }
     } catch (e) {
       this.setState({ role: NO_ROLE, tab: 'feed' });
     }
@@ -213,14 +241,68 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     }
   }
 
-  private async refreshQueue(role: IModeratorRole, deptId: number): Promise<void> {
-    this.setState({ pendingLoading: true });
+  /**
+   * Reload the review queue. `quiet` keeps the cards on screen while it loads,
+   * and keeps them if the reload fails -- for reloads the moderator did not ask
+   * for as such (opening the tab, coming back to the window), where a spinner
+   * would blank out the card they were about to act on.
+   *
+   * A reload can be overtaken: by a newer reload, whose answer wins, or by a
+   * decision made here while it was in flight. Focus is the usual case: the
+   * click that brings the window forward may itself be on Approve. The reload
+   * then read the queue before the decision, so any post decided since it set
+   * off is left out rather than put back as pending.
+   */
+  private async refreshQueue(role: IModeratorRole, deptId: number, quiet: boolean = false): Promise<void> {
+    const started: number = this.queueLoadStarted = ++this.queueClock;
+    this.lastQueueLoad = Date.now();
+    if (!quiet) { this.setState({ pendingLoading: true }); }
     try {
-      const pending: IPost[] = await this.mod.getPendingPosts(role, deptId || undefined);
+      const fresh: IPost[] = await this.mod.getPendingPosts(role, deptId || undefined);
+      if (started !== this.queueLoadStarted) { return; }
+      const pending: IPost[] = fresh.filter((p: IPost) => !(this.decidedAt[p.id] > started));
       this.setState({ pending, pendingLoading: false });
     } catch (e) {
+      if (started !== this.queueLoadStarted) { return; }
+      // Quiet keeps the cards -- unless it overtook a full load still showing its spinner.
+      if (quiet && !this.state.pendingLoading) { return; }
       this.setState({ pending: [], pendingLoading: false, error: `Could not load the review queue: ${e.message || e}` });
     }
+  }
+
+  /** The queue without a post that has just been decided, here or elsewhere; see refreshQueue(). */
+  private removeFromQueue(postId: number): IPost[] {
+    this.decidedAt[postId] = ++this.queueClock;
+    return this.state.pending.filter((p: IPost) => p.id !== postId);
+  }
+
+  private withoutNotice(postId: number): { [postId: number]: IReviewNotice } {
+    const notices: { [postId: number]: IReviewNotice } = { ...this.state.notices };
+    delete notices[postId];
+    return notices;
+  }
+
+  /**
+   * SharePoint refused a decision because the post changed after the queue was
+   * loaded. Decided elsewhere, or deleted: it leaves the queue, but its card
+   * stays, with the reason, until OK. Edited but still pending: the card
+   * switches to the latest version, with its new version tag, to review again.
+   */
+  private showConflict(action: 'approve' | 'reject', post: IPost, conflict: IReviewConflict): void {
+    const stillPending: boolean = conflict.status === ModerationStatus.Pending;
+    const shown: IPost = stillPending ? conflict.latest : post;
+    this.setState({
+      notices: { ...this.state.notices, [post.id]: { action, conflict, post: shown } },
+      pending: stillPending
+        ? this.state.pending.map((p: IPost) => p.id === post.id ? shown : p)
+        : this.removeFromQueue(post.id)
+    });
+  }
+
+  /** OK on a refusal: the card goes, and the queue reloads to catch anything else that moved. */
+  private onDismissNotice = (postId: number): void => {
+    this.setState({ notices: this.withoutNotice(postId) });
+    this.refreshQueue(this.state.role, this.state.queueDeptId, true);
   }
 
   private onLoadMore = async (): Promise<void> => {
@@ -289,23 +371,37 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
     if (this.state.mineOnly === mineOnly) { this.setState({ reloading: false }); }
   }
 
-  private onApprove = async (postId: number): Promise<void> => {
+  private onApprove = async (post: IPost): Promise<boolean> => {
+    this.setState({ notices: this.withoutNotice(post.id) });
     try {
-      await this.mod.approve(postId, this.state.currentUser.id);
+      const conflict: IReviewConflict = await this.mod.approve(post, this.state.currentUser.id);
+      if (conflict) {
+        this.showConflict('approve', post, conflict);
+        return false;
+      }
       // Drop it from the queue and pull the now-published post into the feed.
-      this.setState({ pending: this.state.pending.filter((p: IPost) => p.id !== postId) });
+      this.setState({ pending: this.removeFromQueue(post.id) });
       await this.reloadFeed();
+      return true;
     } catch (e) {
       this.setState({ error: `Could not approve that post: ${e.message || e}` });
+      return false;
     }
   }
 
-  private onReject = async (postId: number, reason: string): Promise<void> => {
+  private onReject = async (post: IPost, reason: string): Promise<boolean> => {
+    this.setState({ notices: this.withoutNotice(post.id) });
     try {
-      await this.mod.reject(postId, reason);
-      this.setState({ pending: this.state.pending.filter((p: IPost) => p.id !== postId) });
+      const conflict: IReviewConflict = await this.mod.reject(post, reason);
+      if (conflict) {
+        this.showConflict('reject', post, conflict);
+        return false;
+      }
+      this.setState({ pending: this.removeFromQueue(post.id) });
+      return true;
     } catch (e) {
       this.setState({ error: `Could not reject that post: ${e.message || e}` });
+      return false;
     }
   }
 
@@ -315,7 +411,8 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       await this.mod.deletePost(postId);
       this.setState({
         posts: this.state.posts.filter((p: IPost) => p.id !== postId),
-        pending: this.state.pending.filter((p: IPost) => p.id !== postId)
+        pending: this.removeFromQueue(postId),
+        notices: this.withoutNotice(postId)
       });
       if (this.state.focusPostId === postId) { this.closeSharedPost(); }
     } catch (e) {
@@ -337,8 +434,14 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
   }
 
   private onQueueDepartmentChange = async (deptId: number): Promise<void> => {
-    this.setState({ queueDeptId: deptId });
+    this.setState({ queueDeptId: deptId, notices: {} });
     await this.refreshQueue(this.state.role, deptId);
+  }
+
+  /** Opening Pending review always reloads it: posts may have been decided since the page loaded. */
+  private selectTab(tab: FeedTab): void {
+    this.setState({ tab });
+    if (tab === 'queue') { this.refreshQueue(this.state.role, this.state.queueDeptId, true); }
   }
 
   private async reloadFeed(mineOnly: boolean = this.state.mineOnly): Promise<void> {
@@ -487,6 +590,8 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
               onApprove={this.onApprove}
               onReject={this.onReject}
               onDelete={this.onDeletePost}
+              notices={this.state.notices}
+              onDismissNotice={this.onDismissNotice}
             />
           : <div>
               <PostSubmitBox
@@ -616,7 +721,7 @@ export default class DiscussionFeed extends React.Component<IDiscussionFeedProps
       <button
         type="button"
         className={`${styles.modTab} ${this.state.tab === key ? styles.modTabActive : ''}`}
-        onClick={() => this.setState({ tab: key })}
+        onClick={() => this.selectTab(key)}
       >
         <Icon iconName={icon} />
         <span>{label}</span>

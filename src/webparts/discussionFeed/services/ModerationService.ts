@@ -1,6 +1,14 @@
 import { sp } from '@pnp/sp';
-import { IFeedConfig, IDepartment, IModeratorRole, IPost, ModerationStatus } from '../models';
+import { IFeedConfig, IDepartment, IModeratorRole, IPost, IReviewConflict, ModerationStatus } from '../models';
 import { repairEmoji, mentionsFrom } from './utils';
+
+/** What a queue card shows; also re-read when a decision is refused. */
+const QUEUE_FIELDS: string[] = [
+  'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
+  'OData__ModerationStatus', 'OData__ModerationComments', 'AuthorId',
+  'Author/Title', 'Author/EMail',
+  'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
+];
 
 /**
  * Departments already carry a per-department SharePoint group named with this
@@ -113,12 +121,7 @@ export class ModerationService {
     }
 
     const items: any[] = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items
-      .select(
-        'Id', 'Title', 'Body', 'Category', 'Created', 'Department', 'DepartmentId',
-        'OData__ModerationStatus', 'OData__ModerationComments', 'AuthorId',
-        'Author/Title', 'Author/EMail',
-        'MentionedUsers/Title', 'MentionedUsers/Name', 'MentionedUsers/EMail'
-      )
+      .select(...QUEUE_FIELDS)
       .expand('Author', 'MentionedUsers')
       .filter(clauses.join(' and '))
       .orderBy('Created', true)     // oldest first: longest-waiting gets reviewed first
@@ -145,7 +148,8 @@ export class ModerationService {
       commentCount: 0,
       status: it.OData__ModerationStatus,
       moderationNote: it.OData__ModerationComments || '',
-      mentions: mentionsFrom(it.MentionedUsers)
+      mentions: mentionsFrom(it.MentionedUsers),
+      etag: it.__metadata ? it.__metadata.etag : undefined
     };
   }
 
@@ -155,8 +159,11 @@ export class ModerationService {
    * written on their own they would send the post straight back to Pending
    * (checked on dev). On a site where Provision-Expiry.ps1 has not run yet
    * the columns do not exist, so approve without them.
+   *
+   * Resolves to null once saved, or to what happened instead if the post
+   * changed after the queue was loaded (see decide()).
    */
-  public async approve(postId: number, approverId?: number): Promise<void> {
+  public async approve(post: IPost, approverId?: number): Promise<IReviewConflict> {
     const fields: any = {
       OData__ModerationStatus: ModerationStatus.Approved,
       OData__ModerationComments: '',
@@ -164,27 +171,65 @@ export class ModerationService {
     };
     if (approverId) { fields.ApprovedById = approverId; }
     try {
-      await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId).update(fields);
+      return await this.decide(post, fields);
     } catch (e) {
       if (!/PublishedOn|ApprovedBy/.test(String((e && e.message) || e))) { throw e; }
-      await this.setStatus(postId, ModerationStatus.Approved, '');
+      return this.decide(post, { OData__ModerationStatus: ModerationStatus.Approved, OData__ModerationComments: '' });
     }
   }
 
-  public async reject(postId: number, reason: string): Promise<void> {
-    await this.setStatus(postId, ModerationStatus.Rejected, reason);
+  public reject(post: IPost, reason: string): Promise<IReviewConflict> {
+    return this.decide(post, {
+      OData__ModerationStatus: ModerationStatus.Rejected,
+      OData__ModerationComments: (reason || '').substring(0, 1000)
+    });
   }
 
   /**
+   * Write a decision onto the version of the post the moderator was shown, and
+   * no other. The version tag read with the queue goes in If-Match, so when two
+   * moderators have the same queue open SharePoint refuses the second decision
+   * (412) rather than letting it overwrite the first: an out-of-date Approve can
+   * no longer publish a rejected post, nor an out-of-date Reject pull a live
+   * one. A post deleted meanwhile gives 404. Reading the status first and then
+   * writing would leave a gap between the two; this leaves none. (Checked on
+   * dev: a reject moves the tag from "1" to "2" and the stale approve gets 412.)
+   *
    * Writing _ModerationStatus requires the Approve Items permission. For a user
    * without it SharePoint refuses the call, so an ordinary user cannot publish
    * their own post even by issuing this request by hand (requirement 5).
    */
-  private async setStatus(postId: number, status: ModerationStatus, note: string): Promise<void> {
-    await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId).update({
-      OData__ModerationStatus: status,
-      OData__ModerationComments: (note || '').substring(0, 1000)
-    });
+  private async decide(post: IPost, fields: any): Promise<IReviewConflict> {
+    try {
+      // "*" (write regardless) only if the tag is somehow missing, so moderation
+      // still works; odata=verbose always returns it.
+      await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(post.id).update(fields, post.etag || '*');
+      return null;
+    } catch (e) {
+      if (e && (e.status === 412 || e.status === 404)) { return this.readConflict(post.id); }
+      throw e;
+    }
+  }
+
+  /** What became of a post whose decision SharePoint refused. */
+  private async readConflict(postId: number): Promise<IReviewConflict> {
+    let it: any;
+    try {
+      it = await sp.web.lists.getByTitle(this.cfg.postsListTitle).items.getById(postId)
+        .select(...QUEUE_FIELDS, 'Modified', 'Editor/Title')
+        .expand('Author', 'MentionedUsers', 'Editor')
+        .get();
+    } catch (e) {
+      if (e && e.status === 404) { return { status: null, by: '', when: '', reason: '', latest: null }; }
+      throw e;
+    }
+    return {
+      status: it.OData__ModerationStatus,
+      by: it.Editor ? it.Editor.Title : '',
+      when: it.Modified,
+      reason: it.OData__ModerationComments || '',
+      latest: this.mapPending(it)
+    };
   }
 
   /** Requirement 13/14 — refused by SharePoint for anyone but a Super Admin. */

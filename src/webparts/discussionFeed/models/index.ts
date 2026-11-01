@@ -49,6 +49,36 @@ export interface IPost {
   moderationNote: string;
   /** People picked in "@mention people", read back from the MentionedUsers column. */
   mentions: IMentionUser[];
+  /**
+   * SharePoint's version tag for the item as it was read. Only set on posts in
+   * the review queue: approve and reject send it back, so SharePoint refuses
+   * the decision if anyone changed the post after the queue was loaded.
+   */
+  etag?: string;
+}
+
+/**
+ * Why SharePoint refused an approve or reject: the post changed after the
+ * queue was loaded. Read fresh from the list once the refusal comes back.
+ */
+export interface IReviewConflict {
+  /** The post's status now; null when it has been deleted. */
+  status: ModerationStatus;
+  /** Who last changed it (Modified By), and when. */
+  by: string;
+  when: string;
+  /** The rejection reason, when it was rejected. */
+  reason: string;
+  /** The post as it is now, with its new version tag; null when deleted. */
+  latest: IPost;
+}
+
+/** A refused decision, shown on its queue card until the moderator clicks OK. */
+export interface IReviewNotice {
+  action: 'approve' | 'reject';
+  conflict: IReviewConflict;
+  /** The card to keep showing, even once a reload drops the post from the queue. */
+  post: IPost;
 }
 
 /** Outcome of the Share action, shown inside the post that was shared. */
