@@ -153,6 +153,9 @@ $pageBg: #ffffff;
   display: flex; align-items: center; gap: 8px; background: none; border: none;
   padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; color: $nameBlack;
   i { font-size: 16px; }
+  /* The boxes are centred, but the letters still look low beside the icon.
+     Flex centres the margin box, so this lifts the label 1px. */
+  span { margin-bottom: 2px; }
 }
 .typeTab:hover { background: #f3f2f1; }
 
