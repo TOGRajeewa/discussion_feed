@@ -11,6 +11,7 @@ import 'tinymce/plugins/autolink';
 
 import styles from './DiscussionFeed.module.scss';
 import { uploadFeedImage } from '../services/UploadService';
+import { IMAGE_RULE, isFileAllowed } from '../services/fileRules';
 
 export interface ITinyMceEditorProps {
   value: string;
@@ -107,8 +108,10 @@ export class TinyMceEditor extends React.Component<ITinyMceEditorProps, {}> {
 
   private onImageUpload = (blobInfo: any, success: (url: string) => void, failure: (err: string) => void): void => {
     const file: File = new File([blobInfo.blob()], blobInfo.filename(), { type: blobInfo.blob().type });
-    uploadFeedImage(this.props.assetLibraryServerRelUrl, file)
-      .then((url: string) => success(url))
+    isFileAllowed(file, IMAGE_RULE)
+      .then((allowed: boolean) => allowed
+        ? uploadFeedImage(this.props.assetLibraryServerRelUrl, file).then((url: string) => success(url))
+        : failure(IMAGE_RULE.allowed))
       .catch((e: any) => failure(`Upload failed: ${e.message || e}`));
   }
 

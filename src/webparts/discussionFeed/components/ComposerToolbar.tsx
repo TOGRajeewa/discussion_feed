@@ -104,11 +104,11 @@ export class ComposerToolbar extends React.Component<IComposerToolbarProps, ICom
         >
           <Icon iconName="Emoji2" />
         </button>
-        <button type="button" className={styles.tbBtn} title="Add image"
+        <button type="button" className={styles.tbBtn} title="Add a PNG or JPEG image"
           onMouseDown={this.noFocusLoss} onClick={this.props.onImage}>
           <Icon iconName="Photo2" />
         </button>
-        <button type="button" className={styles.tbBtn} title="Attach a file"
+        <button type="button" className={styles.tbBtn} title="Attach a PNG, JPEG or PDF"
           onMouseDown={this.noFocusLoss} onClick={this.props.onAttach}>
           <Icon iconName="Attach" />
         </button>

@@ -183,6 +183,25 @@ $pageBg: #ffffff;
 /* editor host (placeholder now lives inside the editor via :before) */
 .editorHost { position: relative; }
 
+/* A picked file that was refused, or whose upload failed. */
+.fileNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid #d29200;
+  border-radius: 4px;
+  background: #fff8e6;
+  color: #8a6100;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.fileNoteIcon { font-size: 16px; margin-top: 1px; }
+.fileNoteText { flex: 1; min-width: 0; word-break: break-word; }
+.fileNoteTitle { font-weight: 600; }
+.fileNoteX { border: none; background: none; cursor: pointer; color: inherit; font-size: 15px; line-height: 1; padding: 2px 4px; }
+
 /* composer image attachments (thumbnails with remove) */
 .composerImages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composerImageThumb {
@@ -480,6 +499,7 @@ $pageBg: #ffffff;
 
 :global(:root[data-theme='dark']) .modBanner { background: #2b2313; color: #e3c07b; }
 :global(:root[data-theme='dark']) .modNotice { background: #2b2313; color: #e3c07b; }
+:global(:root[data-theme='dark']) .fileNote { background: #2b2313; color: #e3c07b; }
 :global(:root[data-theme='dark']) .submittedNote { background: #16301c; border-color: #2c5334; color: #a7e0b4; }
 :global(:root[data-theme='dark']) .submittedNoteX { color: #a7e0b4; }
 :global(:root[data-theme='dark']) .deptPrompt { background: #2b2313; border-color: #4a3c1c; color: #e3c07b; }

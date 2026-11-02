@@ -9,6 +9,7 @@ import { ComposerToolbar } from './ComposerToolbar';
 import { PeoplePickerField } from './PeoplePickerField';
 import { CATEGORY_DEFS, categoryDef, ICategoryDef } from './categories';
 import { uploadFeedImage } from '../services/UploadService';
+import { IFileRule, IMAGE_RULE, ATTACHMENT_RULE, isFileAllowed, uploadFailureText } from '../services/fileRules';
 import { stripHtml } from '../services/utils';
 import {
   ICurrentUser, IMentionUser, IPostDraft, PostCategory, IFeedConfig, IDepartment
@@ -43,6 +44,8 @@ export interface IPostSubmitBoxState {
   addedPeople: IMentionUser[];
   praisePeople: IMentionUser[];
   attachedImages: { url: string; name: string }[];
+  /** Why the last picked file did not make it into the post; null when nothing went wrong. */
+  fileNote: { title: string; detail: string };
   activeFormats: { [cmd: string]: boolean };
   submitting: boolean;
   /** Author's choice when their profile department could not be resolved. */
@@ -62,7 +65,7 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   private empty(category: PostCategory, submitted?: boolean): IPostSubmitBoxState {
     return {
       expanded: false, category, html: '', questionTitle: '',
-      addedPeople: [], praisePeople: [], attachedImages: [], activeFormats: {}, submitting: false,
+      addedPeople: [], praisePeople: [], attachedImages: [], fileNote: null, activeFormats: {}, submitting: false,
       pickedDeptId: this.state ? this.state.pickedDeptId : 0,
       submitted: !!submitted
     };
@@ -106,9 +109,29 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
     input.click();
   }
 
+  /**
+   * Store a picked file if the rule allows it, resolving to its URL. Otherwise
+   * says why on the composer and resolves to null: nothing else reports a
+   * refused or failed upload, which would otherwise just look like nothing happened.
+   */
+  private async uploadChecked(f: File, rule: IFileRule): Promise<string> {
+    this.setState({ fileNote: null });
+    if (!await isFileAllowed(f, rule)) {
+      this.setState({ fileNote: { title: `"${f.name}" ${rule.refused}`, detail: rule.allowed } });
+      return null;
+    }
+    try {
+      return await uploadFeedImage(this.props.config.assetLibraryServerRelUrl, f);
+    } catch (e) {
+      this.setState({ fileNote: { title: `"${f.name}" ${rule.refused}`, detail: uploadFailureText(e) } });
+      return null;
+    }
+  }
+
   private onImage = (): void => {
-    this.pickFile('image/*', async (f: File) => {
-      const url: string = await uploadFeedImage(this.props.config.assetLibraryServerRelUrl, f);
+    this.pickFile(IMAGE_RULE.accept, async (f: File) => {
+      const url: string = await this.uploadChecked(f, IMAGE_RULE);
+      if (!url) { return; }
       // collect as an attachment gallery (rendered as a grid), not inline in the text
       this.setState({ attachedImages: this.state.attachedImages.concat([{ url, name: f.name }]) });
     });
@@ -119,8 +142,9 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
   }
 
   private onAttach = (): void => {
-    this.pickFile('*/*', async (f: File) => {
-      const url: string = await uploadFeedImage(this.props.config.assetLibraryServerRelUrl, f);
+    this.pickFile(ATTACHMENT_RULE.accept, async (f: File) => {
+      const url: string = await this.uploadChecked(f, ATTACHMENT_RULE);
+      if (!url) { return; }
       this.insert(`<p>📎 <a href="${url}">${f.name}</a></p>`);
     });
   }
@@ -202,6 +226,26 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
           className={styles.submittedNoteX}
           title="Dismiss"
           onClick={() => this.setState({ submitted: false })}
+        >×</button>
+      </div>
+    );
+  }
+
+  private renderFileNote(): JSX.Element {
+    const note = this.state.fileNote;
+    if (!note) { return null; }
+    return (
+      <div className={styles.fileNote} role="alert">
+        <Icon iconName="Warning" className={styles.fileNoteIcon} />
+        <div className={styles.fileNoteText}>
+          <div className={styles.fileNoteTitle}>{note.title}</div>
+          <div>{note.detail}</div>
+        </div>
+        <button
+          type="button"
+          className={styles.fileNoteX}
+          title="Dismiss"
+          onClick={() => this.setState({ fileNote: null })}
         >×</button>
       </div>
     );
@@ -317,6 +361,8 @@ export class PostSubmitBox extends React.Component<IPostSubmitBoxProps, IPostSub
               ))}
             </div>}
         </div>
+
+        {this.renderFileNote()}
 
         {/* Add people */}
         <PeoplePickerField
