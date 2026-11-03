@@ -97,6 +97,12 @@ Check "$P indexed on Created By and Created" ((& $idx $P 'Author') -and (& $idx 
 Check "$C indexed on PostLookup" (& $idx $C 'PostLookup') ''
 Check "$L indexed on PostId" (& $idx $L 'PostId') ''
 
+# A lookup whose target list has gone still saves and filters; only reading its
+# value fails, and comment counts then read 0 while the comments still show.
+$postsListId = (Req $super "/web/lists/getbytitle('$P')?`$select=Id").Data.Id
+$lookupXml = (Req $super "/web/lists/getbytitle('$C')/fields/getbyinternalnameortitle('PostLookup')?`$select=SchemaXml").Data.SchemaXml
+Check "$C.PostLookup points at $P" ($lookupXml -match $postsListId) "run Repair-MarketplaceLookup.ps1: $lookupXml"
+
 $authorId = (Req $author '/web/currentuser?$select=Id').Data.Id
 $otherId  = (Req $other  '/web/currentuser?$select=Id').Data.Id
 
@@ -148,7 +154,7 @@ Write-Host "`nComments" -ForegroundColor Cyan
 $c1 = Add $other $C @{ Title = "$marker comment"; Body = '<p>test comment</p>'; PostLookupId = $postId }
 Check "$OtherUser can comment" $c1.Ok (Why $c1)
 $q = Req $author "/web/lists/getbytitle('$C')/items?`$select=PostLookupId&`$filter=PostLookupId eq $postId&`$top=4000"
-Check "the widget's comment-count query works and counts it" ($q.Ok -and @($q.Data.value).Count -eq 1) (Why $q)
+Check "the widget's comment-count query works and counts it" ($q.Ok -and @($q.Data.value).Count -eq 1 -and $q.Data.value[0].PostLookupId -eq $postId) "$(Why $q); PostLookupId read '$($q.Data.value[0].PostLookupId)'"
 $q = Req $author "/web/lists/getbytitle('$C')/items?`$select=Id,Body,Created,AuthorId,Author/Title,Author/EMail&`$expand=Author&`$filter=PostLookupId eq $postId&`$orderby=Created asc"
 Check "the widget's comments query works" ($q.Ok -and @($q.Data.value).Count -eq 1 -and $q.Data.value[0].AuthorId -eq $otherId) (Why $q)
 $r = Remove $author $C $c1.Data.Id
