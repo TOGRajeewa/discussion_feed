@@ -57,7 +57,7 @@ export const SOCIAL_KIND: IFeedKind = {
 
 export const MARKET_KIND: IFeedKind = {
   key: 'market',
-  label: 'Market Place',
+  label: 'Marketplace',
   iconName: 'Shop',
   moderated: false,
   expires: false,
@@ -68,8 +68,8 @@ export const MARKET_KIND: IFeedKind = {
   hashKey: 'market',
   cardIdPrefix: 'df-market-post-',
   mail: {
-    subject: 'You were mentioned in the Market Place',
-    intro: 'You were mentioned in a Market Place post:',
+    subject: 'You were mentioned in the Marketplace',
+    intro: 'You were mentioned in a Marketplace post:',
     linkText: 'Open the post'
   }
 };
